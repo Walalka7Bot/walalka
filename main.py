@@ -71,6 +71,14 @@ async def toggle_auto_trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
     auto_trade_enabled = not auto_trade_enabled
     status = "✅ ON" if auto_trade_enabled else "⛔ OFF"
     await update.message.reply_text(f"Auto-Trade is now: {status}")
+
+# ✅ Start Bot
+app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+app.add_handler(CommandHandler("profit", add_profit))
+app.add_handler(CommandHandler("profits", view_profits))
+app.add_handler(CommandHandler("withdraw_eth", withdraw_eth))
+app.add_handler(CommandHandler("autotrade", toggle_auto_trade))
+
 from flask import Flask
 import threading
 
@@ -84,12 +92,4 @@ def run_flask():
     app_web.run(host='0.0.0.0', port=10000)
 
 threading.Thread(target=run_flask).start()
-
-# ✅ Start Bot
-app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-app.add_handler(CommandHandler("profit", add_profit))
-app.add_handler(CommandHandler("profits", view_profits))
-app.add_handler(CommandHandler("withdraw_eth", withdraw_eth))
-app.add_handler(CommandHandler("autotrade", toggle_auto_trade))
-
 app.run_polling()
