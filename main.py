@@ -11,24 +11,24 @@ import threading
 
 nest_asyncio.apply()
 
-# ✅ ENV variables (during dev only – remove hardcoded token later)
+# ✅ Load from ENV
 INFURA_URL = os.getenv("INFURA_URL")
 WALLET_ADDRESS_ETH = os.getenv("WALLET_ADDRESS_ETH")
 PRIVATE_KEY_ETH = os.getenv("PRIVATE_KEY_ETH")
-TELEGRAM_TOKEN = 
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 # ✅ Web3 setup
 w3 = Web3(Web3.HTTPProvider(INFURA_URL))
 
-# ✅ Flask dummy app to keep port open (for Render)
-flask_app = Flask(__name__)
+# ✅ Flask (Dummy app to prevent Render timeout)
+app_web = Flask("dummy")
 
-@flask_app.route('/')
+@app_web.route('/')
 def home():
-    return "Bot is running!"
+    return "Bot is live!"
 
 def run_flask():
-    flask_app.run(host='0.0.0.0', port=10000)
+    app_web.run(host='0.0.0.0', port=10000)
 
 threading.Thread(target=run_flask).start()
 
@@ -57,7 +57,7 @@ async def view_profits(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def withdraw_eth(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) != 2:
-        await update.message.reply_text("Usage: /withdraw_eth 0.01 0xAddress")
+        await update.message.reply_text("Usage: /withdraw_eth 0.01 0xYourOtherAddress")
         return
     try:
         amount = Decimal(context.args[0])
@@ -91,7 +91,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def notify(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🚨 New Trade Opportunity!\nPair: GOLD\nTime: 5min\nStatus: ⬆️ BUY Setup")
 
-# ✅ Start Telegram bot app
+# ✅ Telegram bot start
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("notify", notify))
@@ -99,4 +99,5 @@ app.add_handler(CommandHandler("profit", add_profit))
 app.add_handler(CommandHandler("profits", view_profits))
 app.add_handler(CommandHandler("withdraw_eth", withdraw_eth))
 app.add_handler(CommandHandler("autotrade", toggle_auto_trade))
+
 app.run_polling()
