@@ -71,6 +71,19 @@ async def toggle_auto_trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
     auto_trade_enabled = not auto_trade_enabled
     status = "✅ ON" if auto_trade_enabled else "⛔ OFF"
     await update.message.reply_text(f"Auto-Trade is now: {status}")
+from flask import Flask
+import threading
+
+app_web = Flask('dummy')  # Dummy Flask app to open a port
+
+@app_web.route('/')
+def home():
+    return "Bot is running!"
+
+def run_flask():
+    app_web.run(host='0.0.0.0', port=10000)
+
+threading.Thread(target=run_flask).start()
 
 # ✅ Start Bot
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
