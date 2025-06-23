@@ -92,4 +92,16 @@ def run_flask():
     app_web.run(host='0.0.0.0', port=10000)
 
 threading.Thread(target=run_flask).start()
+# ✅ /start command
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("👋 Welcome! Bot is now active.")
+
+# ✅ Notification Command (Push Alert)
+async def notify(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🚨 New Trade Opportunity!\nPair: GOLD\nTime: 5min\nStatus: ⬆️ BUY Setup")
+
+# ✅ Register Commands
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("notify", notify))
+
 app.run_polling()
