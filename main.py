@@ -14,10 +14,10 @@ import asyncio
 from dotenv import load_dotenv
 from fpdf import FPDF
 
-# ✅ Load ENV
 load_dotenv()
 nest_asyncio.apply()
 
+# ✅ ENV Variables
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 INFURA_URL = os.getenv("INFURA_URL")
 WALLET_ADDRESS_ETH = os.getenv("WALLET_ADDRESS_ETH")
@@ -27,14 +27,32 @@ WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 # ✅ Web3 Setup
 w3 = Web3(Web3.HTTPProvider(INFURA_URL))
 
-# ✅ Telegram Bot Setup
+# ✅ Telegram Bot
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-# ✅ Trade Logs + Profits
-trade_logs = []
+# ✅ Profit & Trade Logs
 daily_profits = {}
+trade_logs = []
 
-# ✅ Handlers
+# ✅ PDF Report Generator
+async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not trade_logs:
+        await update.message.reply_text("🚫 No trades to report.")
+        return
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt="Daily Trade Report", ln=True, align='C')
+    pdf.ln()
+    for trade in trade_logs:
+        line = f"{trade['time']} | {trade['pair']} | {trade['direction']} | {trade['status']}"
+        pdf.cell(200, 10, txt=line, ln=True)
+    file_path = "/tmp/report.pdf"
+    pdf.output(file_path)
+    with open(file_path, 'rb') as f:
+        await update.message.reply_document(document=f, filename="report.pdf")
+
+# ✅ Profit Tracker
 async def add_profit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) != 1:
         await update.message.reply_text("Usage: /profit 50")
@@ -55,6 +73,7 @@ async def view_profits(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg += f"{day}: ${amount}\n"
     await update.message.reply_text(msg)
 
+# ✅ ETH Withdraw
 async def withdraw_eth(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) != 2:
         await update.message.reply_text("Usage: /withdraw_eth 0.01 0xYourOtherAddress")
@@ -76,12 +95,31 @@ async def withdraw_eth(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
+# ✅ Auto Trade Toggle
+auto_trade_enabled = True
 async def toggle_auto_trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global auto_trade_enabled
     auto_trade_enabled = not auto_trade_enabled
     status = "✅ ON" if auto_trade_enabled else "⛔ OFF"
     await update.message.reply_text(f"Auto-Trade is now: {status}")
 
+# ✅ Market Sections
+async def forex(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🌍 Forex Market:\n- EURUSD: ⬆️ BUY\n- GBPUSD: ⬇️ SELL\n- USDJPY: ⬆️ BUY")
+
+async def crypto(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("₿ Crypto Market:\n- BTC: ⬆️ Breakout\n- ETH: ⬇️ Rejection\n- SOL: ⬆️ Volume Surge")
+
+async def stocks(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("📈 Stocks:\n- TSLA: ⬆️ Bullish\n- AAPL: ⬇️ Pullback\n- AMZN: ⬆️ Recovery")
+
+async def polymarket(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🔮 Polymarket:\n- Trump Wins 2024? 65%\n- BTC > $100k by Dec? 20%")
+
+async def memecoins(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🦍 Memecoins:\n- $PEPE (Halal) ⬆️\n- $FLOKI (Haram) ⬇️\n- $LOOT (Trending)")
+
+# ✅ Basic Commands
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 Welcome! Bot is now active via webhook ✅")
 
@@ -93,100 +131,51 @@ async def notify(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]]
     markup = InlineKeyboardMarkup(buttons)
     await update.message.reply_text(msg, reply_markup=markup)
+    trade_logs.append({
+        'time': datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        'pair': 'GOLD',
+        'direction': 'BUY',
+        'status': 'SENT'
+    })
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     if query.data.startswith("CONFIRM"):
         _, symbol, direction = query.data.split(":")
-        # ✅ Save trade
-        trade_logs.append({
-            "date": datetime.date.today().strftime("%Y-%m-%d"),
-            "pair": symbol,
-            "direction": direction,
-            "status": "CONFIRMED"
-        })
         await query.edit_message_text(text=f"✅ Confirmed: {symbol} → {direction}")
     elif query.data == "IGNORE":
         await query.edit_message_text(text="❌ Signal ignored.")
 
-async def generate_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    today = datetime.date.today().strftime("%Y-%m-%d")
-    trades_today = [t for t in trade_logs if t["date"] == today]
-
-    if not trades_today:
-        await update.message.reply_text("🚫 No trades logged for today.")
-        return
-
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
-    pdf.cell(200, 10, txt=f"📊 Trade Report - {today}", ln=True, align='C')
-    pdf.ln(10)
-
-    for i, trade in enumerate(trades_today, 1):
-        line = f"{i}. {trade['pair']} | {trade['direction']} | {trade['status']}"
-        pdf.cell(200, 10, txt=line, ln=True)
-
-    pdf_path = f"/tmp/report_{today}.pdf"
-    pdf.output(pdf_path)
-
-    with open(pdf_path, 'rb') as f:
-        await update.message.reply_document(f, filename=f"TradeReport_{today}.pdf")
-
-# ✅ Register Commands
+# ✅ Register All Commands
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("notify", notify))
 app.add_handler(CommandHandler("profit", add_profit))
 app.add_handler(CommandHandler("profits", view_profits))
 app.add_handler(CommandHandler("withdraw_eth", withdraw_eth))
 app.add_handler(CommandHandler("autotrade", toggle_auto_trade))
-app.add_handler(CommandHandler("report", generate_report))
-app.add_handler(CallbackQueryHandler(button_handler))
-
-# ✅ Flask + Webhook
-flask_app = Flask(__name__)
-
-@flask_app.route("/")
-def home():
-    return "Bot is live!"
-
-@flask_app.route("/telegram-webhook", methods=["POST"])
-async def telegram_webhook():
-    update = Update.de_json(request.get_json(force=True), app.bot)
-    await app.process_update(update)
-    return "OK"
-# ✅ Market: Forex
-async def forex(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🌍 Forex Market:\n- EURUSD: ⬆️ BUY\n- GBPUSD: ⬇️ SELL\n- USDJPY: ⬆️ BUY")
-
-# ✅ Market: Crypto
-async def crypto(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("₿ Crypto Market:\n- BTC: ⬆️ Breakout\n- ETH: ⬇️ Rejection\n- SOL: ⬆️ Volume Surge")
-
-# ✅ Market: Stocks
-async def stocks(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📈 Stocks:\n- TSLA: ⬆️ Bullish\n- AAPL: ⬇️ Pullback\n- AMZN: ⬆️ Recovery")
-
-# ✅ Market: Polymarket
-async def polymarket(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔮 Polymarket:\n- Trump Wins 2024? 65%\n- BTC > $100k by Dec? 20%")
-
-# ✅ Market: Memecoins
-async def memecoins(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🦍 New Memecoins:\n- $PEPE (Halal) ⬆️\n- $FLOKI (Haram) ⬇️\n- $LOOT (Trending)")
-
-# ✅ Register Suuq Commands
 app.add_handler(CommandHandler("forex", forex))
 app.add_handler(CommandHandler("crypto", crypto))
 app.add_handler(CommandHandler("stocks", stocks))
 app.add_handler(CommandHandler("polymarket", polymarket))
 app.add_handler(CommandHandler("memecoins", memecoins))
+app.add_handler(CommandHandler("report", report))
+app.add_handler(CallbackQueryHandler(button_handler))
 
-# ✅ Auto-trade toggle default value
-auto_trade_enabled = True
+# ✅ Flask Webhook Setup
+flask_app = Flask(__name__)
 
-# ✅ Start bot
+@flask_app.route('/')
+def home():
+    return "Bot is live!"
+
+@flask_app.route('/telegram-webhook', methods=["POST"])
+async def telegram_webhook():
+    update = Update.de_json(request.get_json(force=True), app.bot)
+    await app.process_update(update)
+    return "OK"
+
+# ✅ Start Everything
 async def run():
     await app.bot.set_webhook(WEBHOOK_URL)
 
