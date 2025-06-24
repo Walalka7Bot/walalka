@@ -156,6 +156,32 @@ async def telegram_webhook():
     update = Update.de_json(request.get_json(force=True), app.bot)
     await app.process_update(update)
     return "OK"
+# ✅ Market: Forex
+async def forex(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🌍 Forex Market:\n- EURUSD: ⬆️ BUY\n- GBPUSD: ⬇️ SELL\n- USDJPY: ⬆️ BUY")
+
+# ✅ Market: Crypto
+async def crypto(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("₿ Crypto Market:\n- BTC: ⬆️ Breakout\n- ETH: ⬇️ Rejection\n- SOL: ⬆️ Volume Surge")
+
+# ✅ Market: Stocks
+async def stocks(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("📈 Stocks:\n- TSLA: ⬆️ Bullish\n- AAPL: ⬇️ Pullback\n- AMZN: ⬆️ Recovery")
+
+# ✅ Market: Polymarket
+async def polymarket(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🔮 Polymarket:\n- Trump Wins 2024? 65%\n- BTC > $100k by Dec? 20%")
+
+# ✅ Market: Memecoins
+async def memecoins(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🦍 New Memecoins:\n- $PEPE (Halal) ⬆️\n- $FLOKI (Haram) ⬇️\n- $LOOT (Trending)")
+
+# ✅ Register Suuq Commands
+app.add_handler(CommandHandler("forex", forex))
+app.add_handler(CommandHandler("crypto", crypto))
+app.add_handler(CommandHandler("stocks", stocks))
+app.add_handler(CommandHandler("polymarket", polymarket))
+app.add_handler(CommandHandler("memecoins", memecoins))
 
 # ✅ Auto-trade toggle default value
 auto_trade_enabled = True
