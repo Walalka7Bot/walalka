@@ -12,8 +12,9 @@ import threading
 import nest_asyncio
 import asyncio
 from dotenv import load_dotenv
+from fpdf import FPDF
 
-# ✅ Load ENV variables
+# ✅ Load ENV
 load_dotenv()
 nest_asyncio.apply()
 
@@ -23,15 +24,17 @@ WALLET_ADDRESS_ETH = os.getenv("WALLET_ADDRESS_ETH")
 PRIVATE_KEY_ETH = os.getenv("PRIVATE_KEY_ETH")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-# ✅ Web3 setup
+# ✅ Web3 Setup
 w3 = Web3(Web3.HTTPProvider(INFURA_URL))
 
-# ✅ Telegram bot setup
+# ✅ Telegram Bot Setup
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-# ✅ Profit Tracker
+# ✅ Trade Logs + Profits
+trade_logs = []
 daily_profits = {}
 
+# ✅ Handlers
 async def add_profit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) != 1:
         await update.message.reply_text("Usage: /profit 50")
@@ -73,16 +76,12 @@ async def withdraw_eth(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
-# ✅ Auto-trade toggle
-auto_trade_enabled = True
-
 async def toggle_auto_trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global auto_trade_enabled
     auto_trade_enabled = not auto_trade_enabled
     status = "✅ ON" if auto_trade_enabled else "⛔ OFF"
     await update.message.reply_text(f"Auto-Trade is now: {status}")
 
-# ✅ Basic bot commands
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 Welcome! Bot is now active via webhook ✅")
 
@@ -100,20 +99,52 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     if query.data.startswith("CONFIRM"):
         _, symbol, direction = query.data.split(":")
+        # ✅ Save trade
+        trade_logs.append({
+            "date": datetime.date.today().strftime("%Y-%m-%d"),
+            "pair": symbol,
+            "direction": direction,
+            "status": "CONFIRMED"
+        })
         await query.edit_message_text(text=f"✅ Confirmed: {symbol} → {direction}")
     elif query.data == "IGNORE":
         await query.edit_message_text(text="❌ Signal ignored.")
 
-# ✅ Handlers
+async def generate_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    today = datetime.date.today().strftime("%Y-%m-%d")
+    trades_today = [t for t in trade_logs if t["date"] == today]
+
+    if not trades_today:
+        await update.message.reply_text("🚫 No trades logged for today.")
+        return
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt=f"📊 Trade Report - {today}", ln=True, align='C')
+    pdf.ln(10)
+
+    for i, trade in enumerate(trades_today, 1):
+        line = f"{i}. {trade['pair']} | {trade['direction']} | {trade['status']}"
+        pdf.cell(200, 10, txt=line, ln=True)
+
+    pdf_path = f"/tmp/report_{today}.pdf"
+    pdf.output(pdf_path)
+
+    with open(pdf_path, 'rb') as f:
+        await update.message.reply_document(f, filename=f"TradeReport_{today}.pdf")
+
+# ✅ Register Commands
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("notify", notify))
 app.add_handler(CommandHandler("profit", add_profit))
 app.add_handler(CommandHandler("profits", view_profits))
 app.add_handler(CommandHandler("withdraw_eth", withdraw_eth))
 app.add_handler(CommandHandler("autotrade", toggle_auto_trade))
+app.add_handler(CommandHandler("report", generate_report))
 app.add_handler(CallbackQueryHandler(button_handler))
 
-# ✅ Flask App
+# ✅ Flask + Webhook
 flask_app = Flask(__name__)
 
 @flask_app.route("/")
@@ -126,7 +157,10 @@ async def telegram_webhook():
     await app.process_update(update)
     return "OK"
 
-# ✅ Set webhook and start Flask
+# ✅ Auto-trade toggle default value
+auto_trade_enabled = True
+
+# ✅ Start bot
 async def run():
     await app.bot.set_webhook(WEBHOOK_URL)
 
