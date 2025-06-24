@@ -1,4 +1,4 @@
-# 📊 Hussein7 TradeBot 🤖 – Cutubka 2
+# 📊 walalkaTradebot 🤖 – Cutubka 2
 
 Bot-kan waa Telegram bot ku shaqeynaya Python, kaas oo:
 - Soo dira **signals** (fursado ganacsi) sida GOLD Buy/Sell
