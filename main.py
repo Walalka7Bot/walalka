@@ -13,19 +13,20 @@ import nest_asyncio
 import asyncio
 from dotenv import load_dotenv
 
+# ✅ Load ENV variables
 load_dotenv()
 nest_asyncio.apply()
 
-# ✅ ENV Variables
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 INFURA_URL = os.getenv("INFURA_URL")
 WALLET_ADDRESS_ETH = os.getenv("WALLET_ADDRESS_ETH")
 PRIVATE_KEY_ETH = os.getenv("PRIVATE_KEY_ETH")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-# ✅ Web3 Setup
+# ✅ Web3 setup
 w3 = Web3(Web3.HTTPProvider(INFURA_URL))
 
-# ✅ Telegram Bot
+# ✅ Telegram bot setup
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
 # ✅ Profit Tracker
@@ -72,15 +73,16 @@ async def withdraw_eth(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
-# ✅ Toggle Auto Trade
+# ✅ Auto-trade toggle
 auto_trade_enabled = True
+
 async def toggle_auto_trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global auto_trade_enabled
     auto_trade_enabled = not auto_trade_enabled
     status = "✅ ON" if auto_trade_enabled else "⛔ OFF"
     await update.message.reply_text(f"Auto-Trade is now: {status}")
 
-# ✅ Basic Commands
+# ✅ Basic bot commands
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 Welcome! Bot is now active via webhook ✅")
 
@@ -102,7 +104,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "IGNORE":
         await query.edit_message_text(text="❌ Signal ignored.")
 
-# ✅ Register Commands
+# ✅ Handlers
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("notify", notify))
 app.add_handler(CommandHandler("profit", add_profit))
@@ -111,23 +113,22 @@ app.add_handler(CommandHandler("withdraw_eth", withdraw_eth))
 app.add_handler(CommandHandler("autotrade", toggle_auto_trade))
 app.add_handler(CallbackQueryHandler(button_handler))
 
-# ✅ Flask Webhook
+# ✅ Flask App
 flask_app = Flask(__name__)
 
-@flask_app.route('/')
+@flask_app.route("/")
 def home():
     return "Bot is live!"
 
-@flask_app.route('/telegram-webhook', methods=["POST"])
+@flask_app.route("/telegram-webhook", methods=["POST"])
 async def telegram_webhook():
     update = Update.de_json(request.get_json(force=True), app.bot)
     await app.process_update(update)
     return "OK"
 
-# ✅ Run Webhook + Flask
+# ✅ Set webhook and start Flask
 async def run():
-    webhook_url = "https://walalka.onrender.com/telegram-webhook"
-    await app.bot.set_webhook(webhook_url)
+    await app.bot.set_webhook(WEBHOOK_URL)
 
 if __name__ == "__main__":
     asyncio.run(run())
