@@ -1032,6 +1032,46 @@ if __name__ == "__main__":
     import asyncio
     asyncio.run(run())  # Start webhook
     flask_app.run(host="0.0.0.0", port=10000)
+# ✅ CUTUBKA 26 – Auto Report Export to Google Sheets
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime
+import atexit
+
+# ✅ Jadwalka (report export @ 23:59 daily)
+scheduler = BackgroundScheduler(timezone="Africa/Nairobi")
+
+# ✅ Google Sheets Setup
+def log_profit_to_google(amount: float, market: str, date=None):
+    try:
+        if not date:
+            date = datetime.now().strftime("%Y-%m-%d")
+
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_name("google_credentials.json", scope)
+        client = gspread.authorize(creds)
+
+        sheet = client.open("Hussein7_Profit_Log").sheet1
+        sheet.append_row([date, market.upper(), f"${amount}"])
+        print("✅ Profit logged to Google Sheets")
+    except Exception as e:
+        print(f"Google Sheets Error: {e}")
+
+# ✅ Jadwalka: 23:59 habeen kasta
+@scheduler.scheduled_job("cron", hour=23, minute=59)
+def daily_report_scheduler():
+    # Tusaale xog been ah – waxaad u badali kartaa xogta dhabta ah ee PDF ka imaneyso
+    log_profit_to_google(amount=97.5, market="forex")
+
+# ✅ Bilow Scheduler
+scheduler.start()
+atexit.register(lambda: scheduler.shutdown())
+async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    log_profit_to_google(83.3, "crypto")
+    await update.message.reply_text("📊 Report has been sent to Google Sheets!")
+
+app.add_handler(CommandHandler("report", report))
 
 # ✅ Run Flask thread + bot
 def run_flask():
