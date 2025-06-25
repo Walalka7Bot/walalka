@@ -1178,6 +1178,46 @@ app.add_handler(CommandHandler("stats", stats_command))
 # ✅ Tusaale: Marka TP ama SL la xaqiijiyo
 # log_trade("EURUSD", "BUY", "TP", profit=70.5)
 # log_trade("BTCUSDT", "SELL", "SL", profit=-45.2)
+# ✅ Cutubka 28 – TradingView Webhook JSON Signal Handler (Forex/Crypto/Stocks)
+
+from flask import request
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+@flask_app.route('/tradingview-alert', methods=['POST'])
+def tradingview_alert():
+    try:
+        data = request.get_json()
+
+        symbol = data.get("symbol", "Unknown")
+        direction = data.get("direction", "BUY")
+        timeframe = data.get("timeframe", "5min")
+        market = data.get("market", "forex")
+
+        # Optional fields
+        sl = data.get("sl", "N/A")
+        tp = data.get("tp", "N/A")
+        reason = data.get("reason", "No reason provided.")
+
+        message = f"""🚨 <b>{market.upper()} Trade Signal</b>
+📈 Symbol: <code>{symbol}</code>
+🕒 Timeframe: <code>{timeframe}</code>
+📍 Direction: <b>{direction}</b>
+🎯 TP: <code>{tp}</code> | 🛑 SL: <code>{sl}</code>
+💬 Reason: <i>{reason}</i>"""
+
+        buttons = [[
+            InlineKeyboardButton("✅ Confirm", callback_data=f"CONFIRM:{symbol}:{direction}"),
+            InlineKeyboardButton("❌ Ignore", callback_data="IGNORE")
+        ]]
+        reply_markup = InlineKeyboardMarkup(buttons)
+
+        chat_id = os.getenv("CHAT_ID", "YOUR_CHAT_ID")
+        app.bot.send_message(chat_id=chat_id, text=message, reply_markup=reply_markup, parse_mode='HTML')
+
+        return "✅ Alert received and sent to Telegram."
+    except Exception as e:
+        print(f"Webhook Error: {e}")
+        return f"❌ Error: {str(e)}"
 
 # ✅ Run Flask thread + bot
 def run_flask():
