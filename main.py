@@ -675,6 +675,70 @@ def signal_webhook():
         return "Signal with chart sent"
     except Exception as e:
         return f"Webhook error: {str(e)}"
+from datetime import datetime, timedelta
+import json
+import os
+
+# Faylka la keydiyo profits
+PROFIT_FILE = "profits.json"
+GOAL_AMOUNT = float(os.getenv("PROFIT_GOAL_AMOUNT", 650))
+GOAL_DAYS = int(os.getenv("PROFIT_GOAL_DAYS", 10))
+
+# ✅ Helper function: save profit
+def save_profit(amount):
+    try:
+        if not os.path.exists(PROFIT_FILE):
+            with open(PROFIT_FILE, "w") as f:
+                json.dump([], f)
+        with open(PROFIT_FILE, "r") as f:
+            data = json.load(f)
+        data.append({"amount": amount, "date": datetime.now().isoformat()})
+        with open(PROFIT_FILE, "w") as f:
+            json.dump(data, f)
+    except Exception as e:
+        print(f"Profit Save Error: {e}")
+
+# ✅ Helper function: get progress
+def get_goal_progress():
+    try:
+        if not os.path.exists(PROFIT_FILE):
+            return 0.0, 0
+        with open(PROFIT_FILE, "r") as f:
+            data = json.load(f)
+        start_date = datetime.now() - timedelta(days=GOAL_DAYS)
+        recent_profits = [
+            float(x["amount"]) for x in data
+            if datetime.fromisoformat(x["date"]) >= start_date
+        ]
+        total = sum(recent_profits)
+        remaining = max(GOAL_AMOUNT - total, 0)
+        return total, remaining
+    except Exception as e:
+        print(f"Progress Error: {e}")
+        return 0.0, GOAL_AMOUNT
+
+# ✅ Command: /profit <amount>
+async def add_profit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        amount = float(context.args[0])
+        save_profit(amount)
+        total, remaining = get_goal_progress()
+        await update.message.reply_text(
+            f"💰 Profit added: ${amount:.2f}\n📈 Progress: ${total:.2f} / ${GOAL_AMOUNT}\n⏳ Remaining: ${remaining:.2f}"
+        )
+    except Exception as e:
+        await update.message.reply_text("Usage: /profit 50.00")
+
+# ✅ Command: /profits (view progress only)
+async def view_progress(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    total, remaining = get_goal_progress()
+    await update.message.reply_text(
+        f"📊 Goal Progress\nTarget: ${GOAL_AMOUNT:.2f} in {GOAL_DAYS} days\nProgress: ${total:.2f}\nRemaining: ${remaining:.2f}"
+    )
+
+# ✅ Handlers
+app.add_handler(CommandHandler("profit", add_profit))
+app.add_handler(CommandHandler("profits", view_progress))
 
 # ✅ Run Flask thread + bot
 def run_flask():
