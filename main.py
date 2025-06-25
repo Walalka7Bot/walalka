@@ -1072,6 +1072,45 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📊 Report has been sent to Google Sheets!")
 
 app.add_handler(CommandHandler("report", report))
+# ✅ CHART IMAGE GENERATOR (Cutubka 27)
+import matplotlib.pyplot as plt
+import io
+import datetime
+from PIL import Image
+from telegram import InputMediaPhoto
+
+# ⬇️ Mock chart data generator (real data comes from TradingView, Binance API, etc.)
+def generate_mock_chart(symbol, direction="BUY"):
+    now = datetime.datetime.now()
+    times = [now - datetime.timedelta(minutes=i*5) for i in range(20)][::-1]
+    prices = [1.1000 + (i * 0.0005 if direction == "BUY" else -i * 0.0005) for i in range(20)]
+
+    plt.figure(figsize=(8, 4))
+    plt.plot(times, prices, marker='o', color='green' if direction == "BUY" else 'red')
+    plt.title(f"{symbol} – {direction}")
+    plt.xlabel("Time")
+    plt.ylabel("Price")
+    plt.grid(True)
+    plt.xticks(rotation=45)
+    
+    # Save to memory
+    buf = io.BytesIO()
+    plt.tight_layout()
+    plt.savefig(buf, format='png')
+    buf.seek(0)
+    plt.close()
+
+    return buf
+
+# ⬇️ Send chart image with message (Telegram)
+async def send_trade_chart(symbol, direction, context, chat_id):
+    try:
+        chart_image = generate_mock_chart(symbol, direction)
+        await context.bot.send_photo(chat_id=chat_id, photo=chart_image, caption=f"📊 {symbol} – {direction} Chart")
+    except Exception as e:
+        print(f"Chart Error: {e}")
+# Markaad signal dirayso, kudar sawirka
+await send_trade_chart("EURUSD", "BUY", context, update.effective_chat.id)
 
 # ✅ Run Flask thread + bot
 def run_flask():
