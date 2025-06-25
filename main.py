@@ -1267,6 +1267,182 @@ async def profit_notion(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Usage: /profit_notion 120")
 
 app.add_handler(CommandHandler("profit_notion", profit_notion))
+# ✅ Cutubka 30 – Voice Reminder if No Trade Taken
+
+import asyncio
+import datetime
+from gtts import gTTS
+import tempfile
+import os
+
+# Path to track daily trade activity
+TRADE_LOG_FILE = "daily_trade_log.txt"
+
+# ✅ Call this whenever a trade is confirmed
+def log_trade_today():
+    today = datetime.date.today().isoformat()
+    with open(TRADE_LOG_FILE, "a") as f:
+        f.write(f"{today}\n")
+
+# ✅ Check if a trade was taken today
+def trade_taken_today():
+    today = datetime.date.today().isoformat()
+    if not os.path.exists(TRADE_LOG_FILE):
+        return False
+    with open(TRADE_LOG_FILE, "r") as f:
+        lines = f.read().splitlines()
+    return today in lines
+
+# ✅ Send voice reminder if no trade was taken
+async def remind_if_no_trade(context):
+    chat_id = os.getenv("CHAT_ID", "YOUR_CHAT_ID")
+    if not trade_taken_today():
+        text = "Ma jiraan wax trade ah oo aad qaaday maanta. Fadlan dib u eeg suuqyada!"
+        tts = gTTS(text)
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            tts_path = tmp.name + ".mp3"
+            tts.save(tts_path)
+        with open(tts_path, "rb") as audio:
+            await context.bot.send_voice(chat_id=chat_id, voice=audio)
+        os.remove(tts_path)
+
+# ✅ Scheduler at 23:30 daily
+import schedule
+
+def setup_reminder_job(app_context):
+    def wrapper():
+        asyncio.run(remind_if_no_trade(app_context))
+    schedule.every().day.at("23:30").do(wrapper)
+
+# ✅ Add to your main loop to trigger schedule
+def schedule_loop():
+    while True:
+        schedule.run_pending()
+        time.sleep(30)
+# ✅ Cutubka 31 – Auto Trade Toggle + Execution Execution
+
+from telegram.ext import CommandHandler
+from telegram import Update
+from telegram.ext import ContextTypes
+import os
+
+# Auto mode status
+auto_trade_enabled = False
+
+# ✅ Toggle Command
+async def toggle_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global auto_trade_enabled
+    auto_trade_enabled = not auto_trade_enabled
+    status = "✅ AutoTrade ON" if auto_trade_enabled else "❌ AutoTrade OFF"
+    await update.message.reply_text(f"{status}")
+
+# ✅ Command handler
+app.add_handler(CommandHandler("autotrade", toggle_autotrade))
+
+# ✅ Execution Function
+def execute_trade(symbol: str, direction: str, market: str):
+    if not auto_trade_enabled:
+        print("AutoTrade is OFF. Skipping execution.")
+        return
+
+    print(f"🟢 Executing trade → {market.upper()} | {symbol} | {direction}")
+    # Placeholder: Add your API/broker call here (e.g., MetaTrader, TradingView broker, Exchange)
+
+    # Log or notify
+    app.bot.send_message(
+        chat_id=os.getenv("CHAT_ID", "YOUR_CHAT_ID"),
+        text=f"✅ AutoTrade Executed\nMarket: {market}\nPair: {symbol}\nDirection: {direction}"
+    )
+import json
+import os
+from telegram import Update
+from telegram.ext import CallbackContext
+
+CONFIRM_LOG_FILE = "confirmed_signals.json"
+
+def log_signal(action, symbol, direction):
+    signal = {
+        "action": action,
+        "symbol": symbol,
+        "direction": direction,
+        "timestamp": str(datetime.datetime.now())
+    }
+
+    if not os.path.exists(CONFIRM_LOG_FILE):
+        with open(CONFIRM_LOG_FILE, "w") as f:
+            json.dump([], f)
+
+    with open(CONFIRM_LOG_FILE, "r+") as f:
+        logs = json.load(f)
+        logs.append(signal)
+        f.seek(0)
+        json.dump(logs, f, indent=2)
+
+async def confirm_callback(update: Update, context: CallbackContext):
+    query = update.callback_query
+    await query.answer()
+
+    try:
+        _, symbol, direction = query.data.split(":")
+        log_signal("CONFIRMED", symbol, direction)
+        await query.edit_message_text(f"✅ Signal Confirmed: {symbol} - {direction}")
+    except Exception as e:
+        await query.edit_message_text("⚠️ Invalid confirmation data")
+
+async def ignore_callback(update: Update, context: CallbackContext):
+    query = update.callback_query
+    await query.answer()
+
+    try:
+        log_signal("IGNORED", "N/A", "N/A")
+        await query.edit_message_text("❌ Signal Ignored.")
+    except Exception as e:
+        await query.edit_message_text("⚠️ Failed to ignore signal")
+from confirm_ignore_handler import confirm_callback, ignore_callback
+from telegram.ext import CallbackQueryHandler
+
+app.add_handler(CallbackQueryHandler(confirm_callback, pattern="^CONFIRM:"))
+app.add_handler(CallbackQueryHandler(ignore_callback, pattern="^IGNORE$"))
+import yfinance as yf
+import matplotlib.pyplot as plt
+import pandas as pd
+import datetime
+import tempfile
+
+def generate_chart(symbol, interval="1d", days_back=5):
+    try:
+        # Download historical data
+        end_date = datetime.datetime.now()
+        start_date = end_date - datetime.timedelta(days=days_back)
+        df = yf.download(symbol, start=start_date, end=end_date, interval=interval)
+
+        if df.empty:
+            return None
+
+        fig, ax = plt.subplots()
+        df["Close"].plot(ax=ax, title=f"{symbol.upper()} Chart ({interval})")
+        ax.set_ylabel("Price")
+        ax.grid(True)
+
+        # Save image
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmpfile:
+            image_path = tmpfile.name
+            plt.savefig(image_path)
+            plt.close(fig)
+            return image_path
+
+    except Exception as e:
+        print(f"Chart generation failed: {e}")
+        return None
+from chart_generator import generate_chart
+
+# Inside your webhook or notify logic
+symbol = "AAPL"  # or BTC-USD, ETH-USD
+interval = "5m" if market == "crypto" else "1d"
+image_path = generate_chart(symbol, interval=interval)
+
+if image_path:
+    context.bot.send_photo(chat_id=chat_id, photo=open(image_path, "rb"))
 
 # ✅ Run Flask thread + bot
 def run_flask():
