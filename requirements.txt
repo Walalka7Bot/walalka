@@ -7,3 +7,5 @@ fpdf
 pytz
 gspread
 oauth2client
+matplotlib
+Pillow
