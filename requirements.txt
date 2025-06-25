@@ -9,3 +9,6 @@ gspread
 oauth2client
 matplotlib
 Pillow
+yfinance
+matplotlib
+pandas
