@@ -630,6 +630,51 @@ async def show_confirmed_trades(update: Update, context: ContextTypes.DEFAULT_TY
 
 # ✅ Add /confirmed command to bot
 app.add_handler(CommandHandler("confirmed", show_confirmed_trades))
+import requests
+from io import BytesIO
+from PIL import Image
+from telegram import InputFile
+
+# ✅ Sample function to render a chart using third-party API or webhook
+def get_chart_image(symbol: str, timeframe: str = "5m") -> BytesIO:
+    # Tusaale API image URL – beddel haddii aad leedahay API kale
+    url = f"https://quickchart.io/chart?c={{type:'line',data:{{labels:['1','2','3'],datasets:[{{label:'{symbol}',data:[1,2,3]}}]}}}}"
+    response = requests.get(url)
+    if response.status_code != 200:
+        raise Exception("Chart image fetch failed")
+    return BytesIO(response.content)
+
+# ✅ Usage inside signal webhook
+def get_coin_type_label(coin_name: str) -> str:
+    if "break" in coin_name.lower():
+        return "📈 Breakout"
+    elif "volume" in coin_name.lower():
+        return "🔥 High Volume"
+    else:
+        return "🪙 Coin"
+
+@flask_app.route('/signal-webhook', methods=['POST'])
+def signal_webhook():
+    try:
+        data = request.get_json()
+        symbol = data.get("symbol", "Unknown")
+        direction = data.get("direction", "BUY")
+        timeframe = data.get("timeframe", "5min")
+        market = data.get("market", "crypto")
+
+        label = get_coin_type_label(symbol)
+        halal_status = "🟢 Halal" if is_coin_halal(symbol) else "🔴 Haram"
+
+        msg = f"{label} Signal 📊\nCoin: {symbol}\nTimeframe: {timeframe}\nDirection: {direction}\nStatus: {halal_status}"
+
+        chart_image = get_chart_image(symbol)
+        chat_id = os.getenv("CHAT_ID", "YOUR_CHAT_ID")
+        
+        app.bot.send_photo(chat_id=chat_id, photo=InputFile(chart_image, filename=f"{symbol}_chart.png"), caption=msg)
+
+        return "Signal with chart sent"
+    except Exception as e:
+        return f"Webhook error: {str(e)}"
 
 # ✅ Run Flask thread + bot
 def run_flask():
