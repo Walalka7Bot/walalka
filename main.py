@@ -739,6 +739,76 @@ async def view_progress(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ✅ Handlers
 app.add_handler(CommandHandler("profit", add_profit))
 app.add_handler(CommandHandler("profits", view_progress))
+# ✅ Cutubka 21: Bot UI Buttons – Mute, Market Filter, Halal Toggle, Search
+from telegram.ext import CommandHandler
+from telegram import Update
+from telegram.ext import ContextTypes
+
+# ✅ Voice Alerts Toggle
+voice_alerts_enabled = True
+
+async def toggle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global voice_alerts_enabled
+    voice_alerts_enabled = not voice_alerts_enabled
+    state = "🔊 Voice Alerts ON" if voice_alerts_enabled else "🔇 Voice Alerts OFF"
+    await update.message.reply_text(state)
+
+app.add_handler(CommandHandler("mute", toggle_voice))
+
+# ✅ Market Filter (Forex, Crypto, etc.)
+visible_markets = {
+    "forex": True,
+    "crypto": True,
+    "stocks": True,
+    "polymarket": True,
+    "memecoins": True,
+}
+
+async def toggle_market(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        market = context.args[0].lower()
+        if market in visible_markets:
+            visible_markets[market] = not visible_markets[market]
+            state = "✅ ON" if visible_markets[market] else "❌ OFF"
+            await update.message.reply_text(f"{market.upper()} visibility: {state}")
+        else:
+            await update.message.reply_text("Unknown market. Use one of: forex, crypto, stocks, polymarket, memecoins")
+    except:
+        await update.message.reply_text("Usage: /togglemarket forex")
+
+app.add_handler(CommandHandler("togglemarket", toggle_market))
+
+# ✅ Halal Filter Toggle (Already Exists in Cutubka 9, reused here)
+halal_only_mode = False
+
+async def toggle_halal_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global halal_only_mode
+    halal_only_mode = not halal_only_mode
+    status = "✅ Halal Only Mode ON" if halal_only_mode else "❌ Halal Only Mode OFF"
+    await update.message.reply_text(f"{status}")
+
+app.add_handler(CommandHandler("halalonly", toggle_halal_only))
+
+# ✅ Search Function (Symbol / Coin)
+sample_signals = [
+    {"symbol": "EURUSD", "market": "forex", "direction": "BUY"},
+    {"symbol": "SOL", "market": "crypto", "direction": "SELL"},
+    {"symbol": "TSLA", "market": "stocks", "direction": "BUY"},
+]
+
+async def search_signal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        query = context.args[0].upper()
+        matches = [s for s in sample_signals if query in s["symbol"]]
+        if matches:
+            for m in matches:
+                await update.message.reply_text(f"{m['market'].upper()} Signal\nSymbol: {m['symbol']}\nDirection: {m['direction']}")
+        else:
+            await update.message.reply_text("No matching signal found.")
+    except:
+        await update.message.reply_text("Usage: /search EURUSD")
+
+app.add_handler(CommandHandler("search", search_signal))
 
 # ✅ Run Flask thread + bot
 def run_flask():
