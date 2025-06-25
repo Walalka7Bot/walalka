@@ -1443,6 +1443,54 @@ image_path = generate_chart(symbol, interval=interval)
 
 if image_path:
     context.bot.send_photo(chat_id=chat_id, photo=open(image_path, "rb"))
+import matplotlib.pyplot as plt
+import pandas as pd
+import datetime
+import tempfile
+
+# Sample function for generating chart image (sample data used here)
+def generate_chart_image(symbol="BTCUSD", data=None):
+    if data is None:
+        # Sample data: 10 candles
+        now = datetime.datetime.now()
+        data = pd.DataFrame({
+            "time": [now - datetime.timedelta(minutes=5*i) for i in range(10)][::-1],
+            "open": [100 + i for i in range(10)],
+            "high": [102 + i for i in range(10)],
+            "low": [99 + i for i in range(10)],
+            "close": [101 + i for i in range(10)],
+            "volume": [1000 + i*10 for i in range(10)]
+        })
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+
+    for idx, row in data.iterrows():
+        color = 'green' if row['close'] >= row['open'] else 'red'
+        ax.plot([row['time'], row['time']], [row['low'], row['high']], color=color)
+        ax.plot([row['time'], row['time']], [row['open'], row['close']], color=color, linewidth=5)
+
+    ax.set_title(f"{symbol} Chart")
+    ax.set_ylabel("Price")
+    ax.set_xticks([])
+
+    # Save to temporary file
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+    plt.tight_layout()
+    plt.savefig(tmp.name)
+    plt.close(fig)
+
+    return tmp.name
+from chart_generator import generate_chart_image
+
+async def send_chart(update, context):
+    symbol = "BTCUSD"  # You can customize this based on signal
+    chart_path = generate_chart_image(symbol)
+    with open(chart_path, "rb") as img:
+        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=img)
+from telegram.ext import CommandHandler
+app.add_handler(CommandHandler("chart", send_chart))
+img_path = generate_chart_image("ETHUSD", eth_data)
+bot.send_photo(chat_id=chat_id, photo=open(img_path, "rb"))
 
 # ✅ Run Flask thread + bot
 def run_flask():
