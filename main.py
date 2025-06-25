@@ -809,6 +809,64 @@ async def search_signal(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Usage: /search EURUSD")
 
 app.add_handler(CommandHandler("search", search_signal))
+# ✅ ICT Forex Style Filter Integration
+
+from telegram.ext import CommandHandler
+from telegram import Update
+from telegram.ext import ContextTypes
+
+# Toggle flag
+ict_mode_enabled = True
+
+# ✅ Toggle Command
+async def toggle_ict_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global ict_mode_enabled
+    ict_mode_enabled = not ict_mode_enabled
+    state = "✅ ICT Filter ON" if ict_mode_enabled else "❌ ICT Filter OFF"
+    await update.message.reply_text(state)
+
+app.add_handler(CommandHandler("ictmode", toggle_ict_mode))
+
+# ✅ Example ICT Style Criteria
+def matches_ict_criteria(signal: dict) -> bool:
+    """
+    Sample logic:
+    Only allow:
+    - Timeframe = 5min
+    - Direction must be 'BUY' at discount or 'SELL' at premium (mocked here)
+    """
+    if signal["market"] != "forex":
+        return True  # Only apply filter to Forex
+
+    # Mocked logic for now (you can improve with real ICT concepts later)
+    allowed_timeframes = ["5min"]
+    direction = signal.get("direction", "").upper()
+    symbol = signal.get("symbol", "")
+
+    if signal.get("timeframe", "") not in allowed_timeframes:
+        return False
+
+    # Simulated example: Accept EURUSD only if BUY
+    if symbol == "EURUSD" and direction == "BUY":
+        return True
+    return False
+
+# ✅ Usage in signal webhook
+# Inside your /signal-webhook handler, update like this:
+if ict_mode_enabled and not matches_ict_criteria(data):
+    return "❌ Rejected by ICT Filter"
+
+# Example JSON signal:
+"""
+{
+  "symbol": "EURUSD",
+  "direction": "BUY",
+  "timeframe": "5min",
+  "market": "forex"
+}
+"""
+
+# ✅ Now only ICT-compliant trades will be forwarded when ict_mode_enabled = True
 
 # ✅ Run Flask thread + bot
 def run_flask():
