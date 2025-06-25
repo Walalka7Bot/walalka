@@ -1559,6 +1559,47 @@ async def profit_goal(update, context):
 
 app.add_handler(CommandHandler("profit", add_profit))
 app.add_handler(CommandHandler("goal", profit_goal))
+import os
+import json
+import schedule
+import time
+from datetime import datetime
+from telegram import Bot
+
+# ✅ Setup bot
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
+bot = Bot(token=TELEGRAM_TOKEN)
+
+PROFIT_LOG = "profit_log.json"
+
+def no_trade_reminder():
+    today = datetime.now().strftime("%Y-%m-%d")
+    try:
+        if not os.path.exists(PROFIT_LOG):
+            bot.send_message(chat_id=CHAT_ID, text="⚠️ No trades were logged today.")
+            return
+
+        with open(PROFIT_LOG, "r") as f:
+            data = json.load(f)
+
+        if today not in data or data[today] == 0:
+            bot.send_message(chat_id=CHAT_ID, text="⚠️ No trades were taken today. Please review your strategy.")
+    except Exception as e:
+        print("Reminder Error:", e)
+
+# ✅ Jadwal 23:59 every night
+schedule.every().day.at("23:59").do(no_trade_reminder)
+
+# ✅ Keep running in background
+def run_scheduler():
+    while True:
+        schedule.run_pending()
+        time.sleep(30)
+
+# ✅ If running inside main.py:
+import threading
+threading.Thread(target=run_scheduler).start()
 
 # ✅ Run Flask thread + bot
 def run_flask():
