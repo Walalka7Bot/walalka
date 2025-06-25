@@ -1218,6 +1218,55 @@ def tradingview_alert():
     except Exception as e:
         print(f"Webhook Error: {e}")
         return f"❌ Error: {str(e)}"
+# ✅ Cutubka 29 – Notion P&L Dashboard Sync
+
+import requests
+import datetime
+import os
+
+NOTION_TOKEN = os.getenv("NOTION_TOKEN")
+NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
+
+# ✅ Function to log daily profit to Notion
+def log_profit_to_notion(date: str, profit: float):
+    url = "https://api.notion.com/v1/pages"
+    headers = {
+        "Authorization": f"Bearer {NOTION_TOKEN}",
+        "Content-Type": "application/json",
+        "Notion-Version": "2022-06-28"
+    }
+
+    payload = {
+        "parent": {"database_id": NOTION_DATABASE_ID},
+        "properties": {
+            "Date": {
+                "date": {"start": date}
+            },
+            "Profit": {
+                "number": profit
+            }
+        }
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+    if response.status_code == 200 or response.status_code == 201:
+        print("✅ Profit logged to Notion.")
+    else:
+        print(f"❌ Notion logging error: {response.text}")
+
+# ✅ Example command to trigger from bot (/profit_notion 120)
+from telegram.ext import CommandHandler
+
+async def profit_notion(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        amount = float(context.args[0])
+        date = datetime.date.today().isoformat()
+        log_profit_to_notion(date, amount)
+        await update.message.reply_text(f"✅ Profit ${amount} logged to Notion.")
+    except:
+        await update.message.reply_text("❌ Usage: /profit_notion 120")
+
+app.add_handler(CommandHandler("profit_notion", profit_notion))
 
 # ✅ Run Flask thread + bot
 def run_flask():
