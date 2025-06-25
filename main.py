@@ -1491,6 +1491,74 @@ from telegram.ext import CommandHandler
 app.add_handler(CommandHandler("chart", send_chart))
 img_path = generate_chart_image("ETHUSD", eth_data)
 bot.send_photo(chat_id=chat_id, photo=open(img_path, "rb"))
+import os
+import json
+from datetime import datetime
+from telegram.ext import CommandHandler
+
+# -------------------- ENV --------------------
+DAILY_PROFIT_TARGET = float(os.getenv("DAILY_PROFIT_TARGET", "65"))
+PROFIT_LOG = "profit_log.json"
+
+# -------------------- Helper Functions --------------------
+
+# Save today's profit
+def save_profit(amount):
+    try:
+        today = datetime.now().strftime("%Y-%m-%d")
+        if not os.path.exists(PROFIT_LOG):
+            with open(PROFIT_LOG, "w") as f:
+                json.dump({}, f)
+
+        with open(PROFIT_LOG, "r") as f:
+            data = json.load(f)
+
+        data[today] = data.get(today, 0) + amount
+
+        with open(PROFIT_LOG, "w") as f:
+            json.dump(data, f)
+
+        return data[today]
+    except Exception as e:
+        print("Profit Save Error:", e)
+        return 0
+
+# Get today's profit
+def get_today_profit():
+    today = datetime.now().strftime("%Y-%m-%d")
+    if os.path.exists(PROFIT_LOG):
+        with open(PROFIT_LOG, "r") as f:
+            data = json.load(f)
+        return data.get(today, 0)
+    return 0
+
+# -------------------- Telegram Handlers --------------------
+
+# /profit 25 → Add profit
+async def add_profit(update, context):
+    try:
+        amount = float(context.args[0])
+        today_total = save_profit(amount)
+        await update.message.reply_text(f"✅ ${amount} added. Today's total: ${today_total}")
+    except:
+        await update.message.reply_text("❌ Usage: /profit 25.50")
+
+# /goal → View today's status
+async def profit_goal(update, context):
+    today_profit = get_today_profit()
+    remaining = DAILY_PROFIT_TARGET - today_profit
+    status = "✅ Goal Reached!" if remaining <= 0 else f"💸 You need ${remaining:.2f} more"
+
+    await update.message.reply_text(
+        f"📊 Daily Goal: ${DAILY_PROFIT_TARGET}\n"
+        f"💰 Today's Profit: ${today_profit}\n"
+        f"{status}"
+    )
+
+# -------------------- Add Handlers --------------------
+
+app.add_handler(CommandHandler("profit", add_profit))
+app.add_handler(CommandHandler("goal", profit_goal))
 
 # ✅ Run Flask thread + bot
 def run_flask():
