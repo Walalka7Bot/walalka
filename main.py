@@ -534,6 +534,68 @@ def push_signal_webhook():
         return "✅ Push Notification Sent"
     except Exception as e:
         return f"❌ Error in webhook: {str(e)}"
+from fpdf import FPDF
+from datetime import datetime
+import os
+import asyncio
+import pytz
+from telegram.ext import CommandHandler
+
+# ✅ Storage path
+REPORTS_FOLDER = "reports"
+os.makedirs(REPORTS_FOLDER, exist_ok=True)
+
+# ✅ Sample profit log (Replace this with real DB/file read)
+profit_log = []
+
+# ✅ PDF Generation Function
+def generate_daily_report():
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    filename = os.path.join(REPORTS_FOLDER, f"report_{today_str}.pdf")
+    
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt=f"📊 Daily Trade Report – {today_str}", ln=True, align="C")
+    pdf.ln(10)
+    
+    if not profit_log:
+        pdf.cell(200, 10, txt="No trades recorded today.", ln=True)
+    else:
+        for idx, entry in enumerate(profit_log, 1):
+            pdf.cell(200, 10, txt=f"{idx}. {entry}", ln=True)
+
+    pdf.output(filename)
+    return filename
+
+# ✅ Manual Command: /report
+async def send_report(update, context):
+    file_path = generate_daily_report()
+    with open(file_path, 'rb') as pdf_file:
+        await update.message.reply_document(pdf_file, filename=os.path.basename(file_path))
+
+# ✅ Add command to bot
+app.add_handler(CommandHandler("report", send_report))
+
+# ✅ Automatic Scheduler (every 23:59)
+async def schedule_daily_report(context):
+    while True:
+        now = datetime.now(pytz.timezone("Africa/Nairobi"))
+        target_time = now.replace(hour=23, minute=59, second=0, microsecond=0)
+        if now > target_time:
+            target_time = target_time.replace(day=now.day + 1)
+        wait_seconds = (target_time - now).total_seconds()
+        await asyncio.sleep(wait_seconds)
+
+        # Send report to main chat
+        file_path = generate_daily_report()
+        chat_id = os.getenv("CHAT_ID")
+        if chat_id:
+            with open(file_path, 'rb') as pdf_file:
+                await context.bot.send_document(chat_id=chat_id, document=pdf_file, filename=os.path.basename(file_path))
+
+# ✅ Launch scheduler in background
+app.job_queue.run_once(lambda ctx: asyncio.create_task(schedule_daily_report(ctx)), when=0)
 
 # ✅ Run Flask thread + bot
 def run_flask():
