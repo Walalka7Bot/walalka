@@ -898,6 +898,83 @@ def daily_signal_check():
 scheduler = BackgroundScheduler(timezone=TIMEZONE)
 scheduler.add_job(daily_signal_check, trigger="cron", hour=23, minute=59)
 scheduler.start()
+from telegram.ext import CommandHandler
+from datetime import datetime, timedelta
+import json
+import os
+
+GOAL_FILE = "goal.json"
+
+# ✅ Set or update profit goal
+async def set_goal(update, context):
+    try:
+        amount = float(context.args[0])
+        days = int(context.args[1])
+        start_date = datetime.now().strftime("%Y-%m-%d")
+
+        goal_data = {
+            "target_profit": amount,
+            "target_days": days,
+            "start_date": start_date,
+            "daily_profits": []
+        }
+
+        with open(GOAL_FILE, "w") as f:
+            json.dump(goal_data, f)
+
+        await update.message.reply_text(f"✅ Goal set: ${amount} in {days} days starting from {start_date}")
+    except Exception as e:
+        await update.message.reply_text("❌ Usage: /setgoal 650 10")
+
+# ✅ Add daily profit
+async def add_profit(update, context):
+    try:
+        profit = float(context.args[0])
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        if not os.path.exists(GOAL_FILE):
+            await update.message.reply_text("⚠️ No goal set. Use /setgoal first.")
+            return
+
+        with open(GOAL_FILE, "r") as f:
+            goal_data = json.load(f)
+
+        goal_data["daily_profits"].append({"date": today, "amount": profit})
+
+        with open(GOAL_FILE, "w") as f:
+            json.dump(goal_data, f)
+
+        await update.message.reply_text(f"✅ Profit added: ${profit} on {today}")
+    except:
+        await update.message.reply_text("❌ Usage: /profit 130")
+
+# ✅ Check progress
+async def check_goal(update, context):
+    if not os.path.exists(GOAL_FILE):
+        await update.message.reply_text("⚠️ No goal set.")
+        return
+
+    with open(GOAL_FILE, "r") as f:
+        goal_data = json.load(f)
+
+    total_profit = sum([p["amount"] for p in goal_data["daily_profits"]])
+    days_passed = (datetime.now() - datetime.strptime(goal_data["start_date"], "%Y-%m-%d")).days + 1
+    target_days = goal_data["target_days"]
+    target_profit = goal_data["target_profit"]
+
+    msg = (
+        f"🎯 **Goal Progress**\n"
+        f"Target: ${target_profit} in {target_days} days\n"
+        f"Elapsed: {days_passed} days\n"
+        f"Current Profit: ${total_profit}\n"
+        f"Remaining: ${round(target_profit - total_profit, 2)}"
+    )
+    await update.message.reply_text(msg)
+
+# ✅ Register handlers
+app.add_handler(CommandHandler("setgoal", set_goal))
+app.add_handler(CommandHandler("profit", add_profit))
+app.add_handler(CommandHandler("goal", check_goal))
 
 # ✅ Run Flask thread + bot
 def run_flask():
