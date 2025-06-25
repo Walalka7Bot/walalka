@@ -975,6 +975,63 @@ async def check_goal(update, context):
 app.add_handler(CommandHandler("setgoal", set_goal))
 app.add_handler(CommandHandler("profit", add_profit))
 app.add_handler(CommandHandler("goal", check_goal))
+# ✅ Cutubka 25 – Bot Final Test Mode Script
+
+from telegram.ext import CommandHandler, CallbackQueryHandler
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import ContextTypes
+import os
+
+# ✅ /start command – activate all
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = (
+        "👋 Welcome to *Hussein7 TradeBot*!\n\n"
+        "✅ I am now online and monitoring markets.\n"
+        "📊 You can send signals, test commands, or trigger webhooks.\n\n"
+        "Try using:\n"
+        "/notify – test alert\n"
+        "/profits – view log\n"
+        "/halalonly – toggle halal coins\n"
+        "/autotrade – toggle auto trade\n"
+        "/withdraw_eth – send ETH\n"
+        "/report – get daily PDF\n"
+    )
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
+# ✅ Callback handler for signal buttons
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data.startswith("CONFIRM"):
+        parts = query.data.split(":")
+        symbol = parts[1]
+        direction = parts[2]
+        await query.edit_message_text(f"✅ Trade confirmed for {symbol} – {direction}")
+    elif query.data == "IGNORE":
+        await query.edit_message_text("❌ Signal ignored.")
+
+# ✅ Notify test signal
+async def notify(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = "🚨 Test Signal\nPair: EURUSD\nTime: 5min\nDirection: BUY"
+
+    buttons = [[
+        InlineKeyboardButton("✅ Confirm", callback_data="CONFIRM:EURUSD:BUY"),
+        InlineKeyboardButton("❌ Ignore", callback_data="IGNORE")
+    ]]
+    markup = InlineKeyboardMarkup(buttons)
+    await update.message.reply_text(msg, reply_markup=markup)
+
+# ✅ Add command handlers to app
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("notify", notify))
+app.add_handler(CallbackQueryHandler(button_handler))
+
+# ✅ Reminder: Run everything at the end
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(run())  # Start webhook
+    flask_app.run(host="0.0.0.0", port=10000)
 
 # ✅ Run Flask thread + bot
 def run_flask():
