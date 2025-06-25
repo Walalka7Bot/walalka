@@ -867,6 +867,37 @@ if ict_mode_enabled and not matches_ict_criteria(data):
 """
 
 # ✅ Now only ICT-compliant trades will be forwarded when ict_mode_enabled = True
+from datetime import datetime, date
+from apscheduler.schedulers.background import BackgroundScheduler
+import pytz
+
+# ✅ Set timezone
+TIMEZONE = pytz.timezone("Africa/Nairobi")  # Ku beddel hadii timezone kale tahay
+
+# ✅ Signal tracking
+signals_today = []
+
+def mark_signal_received(symbol):
+    today_str = date.today().isoformat()
+    signals_today.append((symbol, today_str))
+
+def has_signal_today():
+    today_str = date.today().isoformat()
+    return any(day == today_str for _, day in signals_today)
+
+# ✅ Signal webhook update (mark signal received)
+# Inside /signal-webhook:
+mark_signal_received(symbol)  # Add this when signal is processed
+
+# ✅ Reminder function
+def daily_signal_check():
+    if not has_signal_today():
+        app.bot.send_message(chat_id=os.getenv("CHAT_ID"), text="⚠️ No signals were sent today. Please review system.")
+
+# ✅ Scheduler
+scheduler = BackgroundScheduler(timezone=TIMEZONE)
+scheduler.add_job(daily_signal_check, trigger="cron", hour=23, minute=59)
+scheduler.start()
 
 # ✅ Run Flask thread + bot
 def run_flask():
