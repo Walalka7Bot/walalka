@@ -5,3 +5,5 @@ flask
 gunicorn
 fpdf
 pytz
+gspread
+oauth2client
