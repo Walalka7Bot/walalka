@@ -1600,6 +1600,32 @@ def run_scheduler():
 # ✅ If running inside main.py:
 import threading
 threading.Thread(target=run_scheduler).start()
+# Run this once at startup (main.py or deploy.py)
+import asyncio
+
+async def run():
+    await app.bot.set_webhook(WEBHOOK_URL)
+
+if __name__ == "__main__":
+    asyncio.run(run())
+    flask_app.run(host="0.0.0.0", port=10000)
+from apscheduler.schedulers.background import BackgroundScheduler
+from report_generator import generate_pdf_report
+
+scheduler = BackgroundScheduler()
+
+@scheduler.scheduled_job("cron", hour=23, minute=59)
+def auto_send_report():
+    print("⏰ Generating daily report...")
+    generate_pdf_report()
+
+scheduler.start()
+{
+  "title": "📈 Signal Alert",
+  "message": "GOLD Buy (5min TF)",
+  "sound": "trade-alert.mp3",
+  "link": "https://t.me/HUSSEINGAIA"
+}
 
 # ✅ Run Flask thread + bot
 def run_flask():
