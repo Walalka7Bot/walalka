@@ -1111,6 +1111,73 @@ async def send_trade_chart(symbol, direction, context, chat_id):
         print(f"Chart Error: {e}")
 # Markaad signal dirayso, kudar sawirka
 await send_trade_chart("EURUSD", "BUY", context, update.effective_chat.id)
+import json
+import os
+from datetime import datetime
+
+# ✅ FAYLKA TAARIIKHDA
+HISTORY_FILE = "trade_history.json"
+
+# ✅ Helper: Load history
+def load_trade_history():
+    if not os.path.exists(HISTORY_FILE):
+        return []
+    with open(HISTORY_FILE, "r") as file:
+        return json.load(file)
+
+# ✅ Helper: Save history
+def save_trade_history(history):
+    with open(HISTORY_FILE, "w") as file:
+        json.dump(history, file, indent=2)
+
+# ✅ Add new trade result
+def log_trade(symbol, direction, result, profit=0.0, market="forex"):
+    history = load_trade_history()
+    entry = {
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "symbol": symbol,
+        "direction": direction,
+        "result": result,  # "TP" or "SL"
+        "profit": profit,
+        "market": market
+    }
+    history.append(entry)
+    save_trade_history(history)
+
+# ✅ Win Rate & Stats
+def get_trade_stats():
+    history = load_trade_history()
+    if not history:
+        return "❌ No trade history available."
+
+    total = len(history)
+    wins = sum(1 for trade in history if trade["result"].upper() == "TP")
+    losses = sum(1 for trade in history if trade["result"].upper() == "SL")
+    win_rate = round((wins / total) * 100, 2)
+
+    summary = f"""
+📊 Trade Performance Summary
+-----------------------------
+✅ Total Trades: {total}
+🏆 Wins (TP): {wins}
+❌ Losses (SL): {losses}
+📈 Win Rate: {win_rate}%
+-----------------------------
+"""
+    return summary.strip()
+
+# ✅ Command: /stats
+from telegram.ext import CommandHandler
+
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    summary = get_trade_stats()
+    await update.message.reply_text(summary)
+
+app.add_handler(CommandHandler("stats", stats_command))
+
+# ✅ Tusaale: Marka TP ama SL la xaqiijiyo
+# log_trade("EURUSD", "BUY", "TP", profit=70.5)
+# log_trade("BTCUSDT", "SELL", "SL", profit=-45.2)
 
 # ✅ Run Flask thread + bot
 def run_flask():
