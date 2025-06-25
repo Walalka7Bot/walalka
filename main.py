@@ -596,6 +596,40 @@ async def schedule_daily_report(context):
 
 # ✅ Launch scheduler in background
 app.job_queue.run_once(lambda ctx: asyncio.create_task(schedule_daily_report(ctx)), when=0)
+from telegram.ext import CallbackQueryHandler, CommandHandler
+from datetime import datetime
+
+# ✅ In-memory confirmed trades list (can be saved to file or DB)
+confirmed_trades = []
+
+# ✅ Callback handler for confirmation button
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data.startswith("CONFIRM:"):
+        _, symbol, direction = query.data.split(":")
+        entry = f"{datetime.now().strftime('%Y-%m-%d %H:%M')} - {symbol} {direction}"
+        confirmed_trades.append(entry)
+        await query.edit_message_text(text=f"✅ Trade confirmed:\n{entry}")
+
+    elif query.data == "IGNORE":
+        await query.edit_message_text(text="❌ Signal ignored.")
+
+# ✅ Add handler to app
+app.add_handler(CallbackQueryHandler(handle_callback))
+
+# ✅ /confirmed command – Show list of confirmed trades
+async def show_confirmed_trades(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not confirmed_trades:
+        await update.message.reply_text("⚠️ No trades confirmed yet.")
+    else:
+        text = "📋 *Confirmed Trades List:*\n"
+        text += "\n".join(f"{i+1}. {t}" for i, t in enumerate(confirmed_trades))
+        await update.message.reply_text(text, parse_mode="Markdown")
+
+# ✅ Add /confirmed command to bot
+app.add_handler(CommandHandler("confirmed", show_confirmed_trades))
 
 # ✅ Run Flask thread + bot
 def run_flask():
