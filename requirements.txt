@@ -12,3 +12,4 @@ Pillow
 yfinance
 matplotlib
 pandas
+
