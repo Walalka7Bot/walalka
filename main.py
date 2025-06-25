@@ -491,6 +491,49 @@ async def sl_alert(update, context):
 # ✅ Add handlers
 app.add_handler(CommandHandler("tp", tp_alert))
 app.add_handler(CommandHandler("sl", sl_alert))
+from flask import Flask, request
+import requests
+import os
+
+flask_app = Flask(__name__)
+
+# ✅ Env setup
+PUSH_APP_WEBHOOK_URL = os.getenv("PUSH_APP_WEBHOOK_URL", "https://your-push-service.com/api/send")
+
+# ✅ Push Notification function
+def send_push_notification(title: str, message: str):
+    try:
+        payload = {
+            "title": title,
+            "message": message
+        }
+        headers = {
+            "Content-Type": "application/json"
+        }
+        response = requests.post(PUSH_APP_WEBHOOK_URL, json=payload, headers=headers)
+        print("✅ Push Notification sent:", response.status_code)
+    except Exception as e:
+        print(f"❌ Push Notification Error: {e}")
+
+# ✅ Webhook endpoint: Signal + Push Notification
+@flask_app.route('/push-signal-webhook', methods=["POST"])
+def push_signal_webhook():
+    try:
+        data = request.get_json()
+        symbol = data.get("symbol", "Unknown")
+        direction = data.get("direction", "BUY")
+        market = data.get("market", "forex")
+        timeframe = data.get("timeframe", "5min")
+
+        title = f"📈 {market.upper()} Signal"
+        message = f"{symbol} → {direction} ({timeframe})"
+
+        # Send push notification
+        send_push_notification(title, message)
+
+        return "✅ Push Notification Sent"
+    except Exception as e:
+        return f"❌ Error in webhook: {str(e)}"
 
 # ✅ Run Flask thread + bot
 def run_flask():
