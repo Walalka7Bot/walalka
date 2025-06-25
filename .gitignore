@@ -1,3 +1,23 @@
+# Ignore Python compiled files
 __pycache__/
 *.pyc
+
+# Ignore virtualenv
+venv/
+env/
+
+# Ignore environment variables
 .env
+
+# Ignore reports and sensitive data
+/reports/
+*.pdf
+*.log
+
+# Ignore IDE/editor files
+.vscode/
+*.swp
+.DS_Store
+
+# Ignore notebook checkpoints (haddii Colab ama Jupyter la adeegsaday)
+.ipynb_checkpoints/
