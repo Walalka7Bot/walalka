@@ -1,11 +1,28 @@
-### ✅ `.gitignore`
-```gitignore
-.env
+# Ignore Python cache
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Ignore virtual environments
 env/
 venv/
-.idea/
+ENV/
+.venv/
+
+# Ignore system files
 .DS_Store
+Thumbs.db
+
+# Ignore environment config
+.env
+wallets.json
+
+# Ignore logs
+*.log
+
+# Ignore Jupyter checkpoints
+.ipynb_checkpoints/
