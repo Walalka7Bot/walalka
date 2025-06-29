@@ -32,20 +32,30 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_markdown(welcome_msg)
 
 # ✅ /help Command
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    help_msg = (
-        "🧠 *Amarada la heli karo:*\n\n"
-        "/start – Bilow botka\n"
-        "/help – Liiska amarada\n"
-        "/profit – Ku dar profit\n"
-        "/profits – Fiiri profits\n"
-        "/withdraw_eth – ETH u dir\n"
-        "/autotrade – Auto Trade On/Off\n"
-        "/halalonly – Filter Halal Coins\n"
-        "/forex, /crypto, /stocks, /polymarket, /memecoins – Arag signalada\n"
-        "/report – Daily PDF report\n"
+from telegram import Update
+from telegram.ext import ContextTypes, CommandHandler
+
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    welcome_text = (
+        "🤖 *Walalka Tradebot Activated!*\n\n"
+        "Welcome to your personal AI trading assistant.\n\n"
+        "📌 Use these commands to begin:\n"
+        "/forex – Forex trade ideas\n"
+        "/crypto – Crypto signals\n"
+        "/stocks – Stock updates\n"
+        "/memecoins – Memecoin alerts\n"
+        "/polymarket – Polymarket insights\n"
+        "/halalonly – Toggle Halal Coin Filter\n"
+        "/profit – Log daily profit\n"
+        "/withdraw_eth – Auto withdraw ETH\n"
+        "/autotrade – Toggle Auto-Trade\n"
+        "/report – Get daily PDF report\n"
+        "\n🚀 Let's grow your capital together!"
     )
-    await update.message.reply_markdown(help_msg)
+    await update.message.reply_markdown(welcome_text)
+
+# ✅ Add handler to your application
+app.add_handler(CommandHandler("start", start_command))
 
 # ✅ Admin Checker (can be used for any admin-only command)
 def is_admin(user_id: int) -> bool:
