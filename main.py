@@ -1,20 +1,22 @@
  # ✅ Cutubka 1 – Hussein7 TradeBot Initialization + /start + /help + Admin Checker
-
 import os
 import logging
 from telegram import Update, BotCommand
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# ✅ Bot Token from .env or hardcoded (for dev)
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN")
+# ✅ Bot Token from .env
+TELEGRAM_TOKEN = os.getenv("BOT_TOKEN")
 
-# ✅ Admin list (add your Telegram ID here)
-ADMINS = [123456789]  # Change to your actual Telegram user ID
+# ✅ Admin list (change this to your own Telegram ID)
+ADMINS = [123456789]
 
-# ✅ Logging
-logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
+# ✅ Logging setup
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
 
-# ✅ Bot app object
+# ✅ Bot application instance
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
 # ✅ /start Command
