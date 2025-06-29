@@ -635,10 +635,14 @@ coin_description = "A high-volume gambling dApp token"
 status = "🟢 Halal" if is_coin_halal_advanced(coin_name, coin_description) else "🔴 Haram"
 print(f"Token: {coin_name} → Status: {status}")
 
-# ✅ Telegram bot integration (example inside your signal sender)
-if halal_only_mode:
-    if not is_coin_halal_advanced(coin_name, coin_description):
-        return  # Ha dirin haddii coin-ku haram yahay marka toggle ON
+def send_signal_to_telegram(coin_name, coin_description, price, chart_url):
+    if halal_only_mode:
+        if not is_coin_halal_advanced(coin_name, coin_description):
+            print(f"🚫 Coin-ka {coin_name} ma aha halal. Signal lama dirin.")
+            return  # Ha dirin haddii coin-ku haram yahay marka toggle ON
+
+    message = f"🚀 {coin_name}\nPrice: ${price}\nChart: {chart_url}"
+    bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
 
 msg = f"🚨 {coin_name} Opportunity\nStatus: {'🟢 Halal' if is_coin_halal_advanced(coin_name, coin_description) else '🔴 Haram'}"
 await context.bot.send_message(chat_id=chat_id, text=msg)
