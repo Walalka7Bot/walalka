@@ -1,4 +1,4 @@
-# Hussein7TradeBot 🤖
+# walalkaTradeBot 🤖
 
 Telegram AI Trading Bot that sends real-time trade opportunities for:
 
