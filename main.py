@@ -1,1190 +1,1710 @@
+ # ✅ Cutubka 1 – Hussein7 TradeBot Initialization + /start + /help + Admin Checker
+
 import os
-import nest_asyncio
+import logging
+from telegram import Update, BotCommand
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from telegram import Update
-from datetime import datetime
-from decimal import Decimal
-from web3 import Web3
 
-nest_asyncio.apply()
+# ✅ Bot Token from .env or hardcoded (for dev)
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN")
 
-# ✅ Load ENV variables
-INFURA_URL = os.getenv("INFURA_URL")
-WALLET_ADDRESS_ETH = os.getenv("WALLET_ADDRESS_ETH")
-PRIVATE_KEY_ETH = os.getenv("PRIVATE_KEY_ETH")
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+# ✅ Admin list (add your Telegram ID here)
+ADMINS = [123456789]  # Change to your actual Telegram user ID
 
-# ✅ Setup Web3
-w3 = Web3(Web3.HTTPProvider(INFURA_URL))
+# ✅ Logging
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 
-# ✅ Profit tracking
-daily_profits = {}
-auto_trade_enabled = True  # default ON
-
-# ✅ Command: /profit 50
-async def add_profit(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if len(context.args) != 1:
-        return await update.message.reply_text("Usage: /profit 50")
-    amount = Decimal(context.args[0])
-    today = datetime.now().strftime("%Y-%m-%d")
-    if today not in daily_profits:
-        daily_profits[today] = Decimal("0")
-    daily_profits[today] += amount
-    await update.message.reply_text(f"✅ Profit added: ${amount} for {today}")
-
-# ✅ Command: /profits
-async def view_profits(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not daily_profits:
-        return await update.message.reply_text("🚫 No profits recorded.")
-    msg = "📊 Daily Profits:\n"
-    for day, amount in daily_profits.items():
-        msg += f"{day}: ${amount}\n"
-    await update.message.reply_text(msg)
-
-# ✅ Command: /withdraw_eth 0.01 0xYourOtherAddress
-async def withdraw_eth(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if len(context.args) != 2:
-        return await update.message.reply_text("Usage: /withdraw_eth 0.01 0xYourOtherAddress")
-    try:
-        amount = Decimal(context.args[0])
-        to_address = context.args[1]
-        nonce = w3.eth.get_transaction_count(WALLET_ADDRESS_ETH)
-        tx = {
-            'nonce': nonce,
-            'to': to_address,
-            'value': w3.to_wei(amount, 'ether'),
-            'gas': 21000,
-            'gasPrice': w3.to_wei('50', 'gwei')
-        }
-        signed_tx = w3.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY_ETH)
-        tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-        await update.message.reply_text(f"✅ Withdraw Success: {w3.to_hex(tx_hash)}")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {str(e)}")
-
-# ✅ Command: /autotrade (toggle ON/OFF)
-async def toggle_auto_trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global auto_trade_enabled
-    auto_trade_enabled = not auto_trade_enabled
-    status = "✅ ON" if auto_trade_enabled else "⛔ OFF"
-    await update.message.reply_text(f"Auto-Trade is now: {status}")
-
-from flask import Flask, request
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
-import threading
-import os
-import nest_asyncio
-nest_asyncio.apply()
-
-# ✅ ENV Variables
-INFURA_URL = os.getenv("INFURA_URL")
-WALLET_ADDRESS_ETH = os.getenv("WALLET_ADDRESS_ETH")
-PRIVATE_KEY_ETH = os.getenv("PRIVATE_KEY_ETH")
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-
-# ✅ Telegram App
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+# ✅ Bot app object
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-# ✅ Start command
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Welcome! Bot is now active.")
+# ✅ /start Command
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    welcome_msg = (
+        f"👋 Salaam {user.first_name},\n\n"
+        "Ku soo dhawoow *Hussein7 TradeBot* 📊🤖\n\n"
+        "✅ Forex Signals\n"
+        "✅ Crypto Alerts\n"
+        "✅ Stock Opportunities\n"
+        "✅ Memecoin Webhook Detector\n\n"
+        "Isticmaal `/help` si aad u aragto amarrada oo dhan."
+    )
+    await update.message.reply_markdown(welcome_msg)
 
-# ✅ Push notify command (manual test)
-async def notify(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = "🚨 New Trade Opportunity!\nPair: GOLD\nTime: 5min\nStatus: ⬆️ BUY Setup"
-    buttons = [[
-        InlineKeyboardButton("✅ Confirm", callback_data="CONFIRM:GOLD:BUY"),
-        InlineKeyboardButton("❌ Ignore", callback_data="IGNORE")
-    ]]
-    markup = InlineKeyboardMarkup(buttons)
-    await update.message.reply_text(msg, reply_markup=markup)
+# ✅ /help Command
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    help_msg = (
+        "🧠 *Amarada la heli karo:*\n\n"
+        "/start – Bilow botka\n"
+        "/help – Liiska amarada\n"
+        "/profit – Ku dar profit\n"
+        "/profits – Fiiri profits\n"
+        "/withdraw_eth – ETH u dir\n"
+        "/autotrade – Auto Trade On/Off\n"
+        "/halalonly – Filter Halal Coins\n"
+        "/forex, /crypto, /stocks, /polymarket, /memecoins – Arag signalada\n"
+        "/report – Daily PDF report\n"
+    )
+    await update.message.reply_markdown(help_msg)
 
-# ✅ Button click handler
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    if query.data.startswith("CONFIRM"):
-        _, symbol, direction = query.data.split(":")
-        await query.edit_message_text(text=f"✅ Confirmed: {symbol} → {direction}")
-    elif query.data == "IGNORE":
-        await query.edit_message_text(text="❌ Signal ignored.")
+# ✅ Admin Checker (can be used for any admin-only command)
+def is_admin(user_id: int) -> bool:
+    return user_id in ADMINS
+# ✅ Cutubka 2: Profit Logger System
+from telegram.ext import CommandHandler
+from datetime import datetime
+import json
+import os
 
-# ✅ Register commands
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("notify", notify))
-app.add_handler(CallbackQueryHandler(button_handler))
+# Faylka loo keydiyo profits
+PROFIT_FILE = "profits.json"
 
-# ✅ Flask + Webhook route
+# ✅ Fuction: Save daily profit
+def save_profit(amount):
+    today = datetime.now().strftime("%Y-%m-%d")
+    profits = load_profits()
+    profits[today] = profits.get(today, 0) + amount
+    with open(PROFIT_FILE, "w") as f:
+        json.dump(profits, f)
+
+# ✅ Fuction: Load profits
+def load_profits():
+    if not os.path.exists(PROFIT_FILE):
+        return {}
+    with open(PROFIT_FILE, "r") as f:
+        return json.load(f)
+
+# ✅ Command: /profit 100
+async def add_profit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        amount = float(context.args[0])
+        save_profit(amount)
+        await update.message.reply_text(f"✅ Profit of ${amount} saved for today.")
+    except (IndexError, ValueError):
+        await update.message.reply_text("❗ Usage: /profit 120.5")
+
+# ✅ Command: /profits
+async def show_profits(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    profits = load_profits()
+    if not profits:
+        await update.message.reply_text("📭 No profit records found.")
+        return
+
+    msg = "📊 Daily Profit Log:\n"
+    total = 0
+    for date, amount in sorted(profits.items()):
+        msg += f"{date}: ${amount:.2f}\n"
+        total += amount
+    msg += f"\n💰 Total: ${total:.2f}"
+    await update.message.reply_text(msg)
+# ✅ Cutubka 3: Forex Trade Signal Generator
+from telegram.ext import CommandHandler
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+# ✅ Forex trade idea sender
+async def send_forex_trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Forex signal example
+    pair = "EURUSD"
+    direction = "BUY"
+    entry = 1.0950
+    tp = 1.1000
+    sl = 1.0910
+
+    # Halal label (optional, from Cutub 9)
+    halal_status = "🟢 Halal"
+
+    msg = (
+        f"📈 Forex Trade Alert\n"
+        f"Pair: {pair}\n"
+        f"Direction: {direction}\n"
+        f"Entry: {entry}\n"
+        f"TP: {tp}\n"
+        f"SL: {sl}\n"
+        f"Status: {halal_status}"
+    )
+
+    # Buttons: Confirm or Ignore
+    buttons = [
+        [InlineKeyboardButton("✅ Confirm", callback_data="FOREX_CONFIRM")],
+        [InlineKeyboardButton("❌ Ignore", callback_data="FOREX_IGNORE")]
+    ]
+    reply_markup = InlineKeyboardMarkup(buttons)
+
+    await update.message.reply_text(msg, reply_markup=reply_markup)
+# ✅ Cutubka 4: AutoTrade ON/OFF Toggle
+from telegram.ext import CommandHandler
+
+# ✅ Global variable to hold autotrade status
+auto_trade_enabled = False
+
+# ✅ Command to toggle autotrade
+async def toggle_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global auto_trade_enabled
+    auto_trade_enabled = not auto_trade_enabled
+    status = "✅ AutoTrade Mode is ON" if auto_trade_enabled else "❌ AutoTrade Mode is OFF"
+    await update.message.reply_text(status)
+
+# ✅ Function to check if autotrade is on
+def is_autotrade_on() -> bool:
+    return auto_trade_enabled
+# 📁 webhook.py
+
+from telegram import Update
+from telegram.ext import ContextTypes
+from flask import request
+
+# ✅ Telegram Webhook Handler
+# This function will be called by Flask when webhook receives POST
+async def telegram_webhook_handler(app, update_json):
+    try:
+        update = Update.de_json(update_json, app.bot)
+        await app.process_update(update)
+        return "OK"
+    except Exception as e:
+        print(f"Webhook Error: {str(e)}")
+        return f"ERROR: {str(e)}"
+
+# 🧠 Sida loogu daro main.py
+# Ku dar route-kan hoosta Flask app-kaaga
+# Waxa uu isticmaalaa handler-ka kore si uu nadiif u ahaado main.py
+from flask import Flask
+from webhook import telegram_webhook_handler
+
 flask_app = Flask(__name__)
 
-@flask_app.route('/')
-def home():
-    return "Bot is running!"
+@flask_app.route('/telegram-webhook', methods=["POST"])
+async def telegram_webhook():
+    return await telegram_webhook_handler(app, request.get_json(force=True))
+from flask import request
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+import os
 
-@flask_app.route('/webhook', methods=["POST"])
-def webhook_handler():
+# Optional halal filter function (use in crypto only)
+def is_coin_halal(symbol: str) -> bool:
+    haram_keywords = ["casino", "gambling", "loan", "riba", "liquor", "alcohol"]
+    return not any(word in symbol.lower() for word in haram_keywords)
+
+@flask_app.route('/signal-webhook', methods=['POST'])
+def signal_webhook():
     try:
         data = request.get_json()
-        symbol = data.get("symbol", "Unknown")
-        direction = data.get("direction", "BUY/SELL")
-        time_frame = data.get("time", "5min")
 
-        msg = f"🚨 Signal Received!\nPair: {symbol}\nTime: {time_frame}\nDirection: {direction}"
+        # Extract fields from incoming JSON
+        symbol = data.get("symbol", "Unknown")
+        direction = data.get("direction", "BUY")
+        timeframe = data.get("timeframe", "5min")
+        market = data.get("market", "forex")
+        sl = data.get("stop_loss", "N/A")
+        tp = data.get("take_profit", "N/A")
+
+        # Halal status for crypto
+        halal_status = ""
+        if market.lower() == "crypto":
+            halal_status = "🟢 Halal" if is_coin_halal(symbol) else "🔴 Haram"
+
+        # Construct message
+        message = (
+            f"🚨 New {market.upper()} Signal\n"
+            f"Pair: {symbol}\n"
+            f"Timeframe: {timeframe}\n"
+            f"Direction: {direction}\n"
+            f"TP: {tp}\nSL: {sl}\n"
+            f"{halal_status}"
+        )
+
+        # Buttons for confirmation
         buttons = [[
             InlineKeyboardButton("✅ Confirm", callback_data=f"CONFIRM:{symbol}:{direction}"),
             InlineKeyboardButton("❌ Ignore", callback_data="IGNORE")
         ]]
-        markup = InlineKeyboardMarkup(buttons)
-
-        # ✅ Bedel CHAT ID hoose
-        app.bot.send_message(chat_id=CHAT_ID, text=msg, reply_markup=markup)
-        return "✅ Signal sent"
-    except Exception as e:
-        return f"❌ Error: {str(e)}"
-# ✅ CUTUBKA 11: Daily Report Generator (Single File)
-import os, json, asyncio
-from datetime import datetime
-from fpdf import FPDF
-from apscheduler.schedulers.background import BackgroundScheduler
-from telegram import Update
-from telegram.ext import ContextTypes, CommandHandler
-
-LOG_FILE = "daily_trades.json"
-CHAT_ID = os.getenv("CHAT_ID")
-
-# 1️⃣ Trade Logger
-def log_trade_result(symbol, result, pnl):
-    today = datetime.now().strftime("%Y-%m-%d")
-    log_entry = {"date": today, "symbol": symbol, "result": result, "pnl": pnl}
-
-    try:
-        with open(LOG_FILE, "r") as f:
-            data = json.load(f)
-    except (FileNotFoundError, json.decoder.JSONDecodeError):
-        data = []
-
-    data.append(log_entry)
-
-    with open(LOG_FILE, "w") as f:
-        json.dump(data, f, indent=2)
-
-# 2️⃣ PDF Generator
-def generate_daily_report():
-    today = datetime.now().strftime("%Y-%m-%d")
-    try:
-        with open(LOG_FILE, "r") as f:
-            data = json.load(f)
-    except:
-        return None
-
-    today_trades = [d for d in data if d["date"] == today]
-    if not today_trades:
-        return None
-
-    win_count = sum(1 for d in today_trades if d["result"].upper() == "WIN")
-    loss_count = sum(1 for d in today_trades if d["result"].upper() == "LOSS")
-    total_pnl = sum(float(d["pnl"]) for d in today_trades)
-
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=14)
-    pdf.cell(200, 10, txt=f"📊 Daily Report – {today}", ln=True, align='C')
-    pdf.ln(10)
-
-    for trade in today_trades:
-        line = f"{trade['symbol']} - {trade['result']} - P&L: ${trade['pnl']}"
-        pdf.cell(200, 10, txt=line, ln=True)
-
-    pdf.ln(10)
-    pdf.cell(200, 10, txt=f"✅ Wins: {win_count} | ❌ Losses: {loss_count} | 💰 Net P&L: ${round(total_pnl, 2)}", ln=True)
-
-    file_path = f"report_{today}.pdf"
-    pdf.output(file_path)
-    return file_path
-
-# 3️⃣ /report Command Handler
-async def report_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    pdf_path = generate_daily_report()
-    if not pdf_path:
-        await update.message.reply_text("⚠️ Ma jiro report maanta.")
-        return
-
-    with open(pdf_path, "rb") as f:
-        await context.bot.send_document(chat_id=update.effective_chat.id, document=f, filename=pdf_path)
-
-# ✅ Add this in your main.py:
-# app.add_handler(CommandHandler("report", report_command))
-
-# 4️⃣ Automatic Schedule @ 23:59
-def schedule_daily_report(bot):
-    scheduler = BackgroundScheduler()
-
-    def job():
-        pdf_path = generate_daily_report()
-        if pdf_path and CHAT_ID:
-            asyncio.run(bot.send_document(chat_id=CHAT_ID, document=open(pdf_path, "rb"), filename=pdf_path))
-
-    scheduler.add_job(job, 'cron', hour=23, minute=59)
-    scheduler.start()
-## ✅ Cutubka 12: Trade Result Buttons (WIN / LOSS / BE)
-
-### 🎯 Ujeeddo
-Markaad gujiso `Confirm` signal-ka, bot-ku wuxuu kuusoo bandhigayaa **3 buttons** si aad u sheegto natiijada ganacsiga:
-
-- ✅ `WIN`
-- ❌ `LOSS`
-- 🤝 `BE` (Breakeven)
-
-Bot-ka wuxuu si toos ah:
-- U keydiyaa result-kii
-- U xisaabiyaa P&L
-- U diiwaangeliyaa file JSON ah (`daily_trades.json`)
-- Waxaana lagu dari karaa `PDF` report-ka habeen kasta 23:59
-
----
-
-### 🧠 Tallaabooyinka Code-ka:
-
-#### ✅ Update `signal_webhook` – Add callback to "Confirm"
-
-```python
-buttons = [[
-    InlineKeyboardButton("✅ Confirm", callback_data=f"CONFIRM:{symbol}:{direction}"),
-    InlineKeyboardButton("❌ Ignore", callback_data="IGNORE")
-]]
-```
-
-#### ✅ Add Callback for "CONFIRM" – Show Result Options
-
-```python
-@app.callback_query_handler(lambda c: c.data and c.data.startswith("CONFIRM:"))
-async def handle_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    _, symbol, direction = query.data.split(":")
-
-    buttons = [
-        [
-            InlineKeyboardButton("✅ WIN", callback_data=f"RESULT:WIN:{symbol}"),
-            InlineKeyboardButton("❌ LOSS", callback_data=f"RESULT:LOSS:{symbol}"),
-            InlineKeyboardButton("🤝 BE", callback_data=f"RESULT:BE:{symbol}")
-        ]
-    ]
-    reply_markup = InlineKeyboardMarkup(buttons)
-    await query.message.reply_text(f"📊 What was the result for {symbol}?", reply_markup=reply_markup)
-```
-
-#### ✅ Handle Result Selection + Save to JSON
-
-```python
-import json
-from datetime import datetime
-
-DAILY_LOG = "daily_trades.json"
-
-@app.callback_query_handler(lambda c: c.data and c.data.startswith("RESULT:"))
-async def handle_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    _, result, symbol = query.data.split(":")
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-    trade_entry = {
-        "symbol": symbol,
-        "result": result,
-        "time": timestamp
-    }
-
-    try:
-        with open(DAILY_LOG, "r") as f:
-            data = json.load(f)
-    except:
-        data = []
-
-    data.append(trade_entry)
-
-    with open(DAILY_LOG, "w") as f:
-        json.dump(data, f, indent=2)
-
-    await query.message.reply_text(f"✅ Result saved: {symbol} → {result}")
-```
-
----
-
-### 🧾 Tusaale JSON Format:
-```json
-[
-  {
-    "symbol": "EURUSD",
-    "result": "WIN",
-    "time": "2025-06-25 15:15"
-  }
-]
-```
-
----
-
-## 🔄 Xiriir la leh:
-- ✅ **Cutubka 11**: Jadwal PDF report oo uu ka akhrisanayo file-ka `daily_trades.json`
-- ✅ **Cutubka 10**: Auto Lot Calculation si aad ugu xisaabiso result kasta
-# ✅ Cutubka 13: Memecoin Detector + Auto Halal Filter
-# Waxay raadisaa memecoins cusub, u diraa Telegram signal + halal status, wallet & chain info
-
-import requests, asyncio
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
-from telegram.ext import CommandHandler
-from apscheduler.schedulers.background import BackgroundScheduler
-
-# 🔒 Halal filter keywords
-HARAM_KEYWORDS = ["casino", "bet", "gamble", "loan", "alcohol", "riba", "sex"]
-
-# 🔎 Halal Checker
-def is_halal_coin(symbol: str) -> bool:
-    return not any(haram in symbol.lower() for haram in HARAM_KEYWORDS)
-
-# 📡 Fetch trending memecoins (from DEXscreener sample API)
-def fetch_trending_coins():
-    try:
-        response = requests.get("https://api.dexscreener.com/latest/dex/pairs")
-        data = response.json()
-
-        coins = []
-        for pair in data.get("pairs", [])[:5]:  # Top 5 only
-            coin = {
-                "name": pair["baseToken"]["name"],
-                "symbol": pair["baseToken"]["symbol"],
-                "chain": pair["chainId"],
-                "wallet": pair["pairAddress"],
-                "image": pair.get("imageUrl", None)
-            }
-            coins.append(coin)
-
-        return coins
-    except Exception as e:
-        print(f"Memecoin fetch error: {e}")
-        return []
-
-# 🚀 Send Telegram Alert with Halal status
-async def send_memecoin_alert(app, chat_id):
-    trending = fetch_trending_coins()
-    for coin in trending:
-        status = "🟢 Halal" if is_halal_coin(coin["symbol"]) else "🔴 Haram"
-        msg = (
-            f"🚀 *Trending Memecoin Alert!*\n\n"
-            f"Name: {coin['name']}\n"
-            f"Symbol: `{coin['symbol']}`\n"
-            f"Chain: {coin['chain']}\n"
-            f"Wallet: `{coin['wallet']}`\n"
-            f"Status: {status}"
-        )
-
-        buttons = [[
-            InlineKeyboardButton("🧾 View on DexTools", url=f"https://www.dexscreener.com/{coin['chain']}/{coin['wallet']}"),
-            InlineKeyboardButton("📥 Add to Watchlist", callback_data=f"WATCH_{coin['symbol']}")
-        ]]
         reply_markup = InlineKeyboardMarkup(buttons)
 
-        try:
-            if coin["image"]:
-                await app.bot.send_photo(chat_id=chat_id, photo=coin["image"], caption=msg, parse_mode="Markdown", reply_markup=reply_markup)
-            else:
-                await app.bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown", reply_markup=reply_markup)
-        except Exception as e:
-            print(f"Send error: {e}")
+        # Send message to Telegram chat
+        chat_id = os.getenv("CHAT_ID", "YOUR_CHAT_ID")
+        app.bot.send_message(chat_id=chat_id, text=message, reply_markup=reply_markup)
 
-# 🧪 /memecoins command
-app.add_handler(CommandHandler("memecoins", lambda u, c: asyncio.create_task(send_memecoin_alert(app, u.effective_chat.id))))
-
-# ⏰ Jadwal automatic ah – 60 daqiiqo kasta
-scheduler = BackgroundScheduler()
-scheduler.add_job(lambda: asyncio.run(send_memecoin_alert(app, chat_id=os.getenv("CHAT_ID"))), 'interval', minutes=60)
-scheduler.start()
-# ✅ Cutubka 14: Auto Withdraw ETH
-# Si fudud ETH uga dir bot-ka wallet-kiisa adigoo isticmaalaya command /withdraw_eth
-
-import os, json
-from web3 import Web3
-from telegram.ext import CommandHandler
-
-INFURA_URL = os.getenv("INFURA_URL")
-PRIVATE_KEY_ETH = os.getenv("PRIVATE_KEY_ETH")
-WALLET_ADDRESS_ETH = os.getenv("WALLET_ADDRESS_ETH")
-
-web3 = Web3(Web3.HTTPProvider(INFURA_URL))
-
-# 🏦 Function: ETH Transfer
-def send_eth(destination: str, amount_eth: float) -> str:
-    try:
-        account = web3.eth.account.from_key(PRIVATE_KEY_ETH)
-        nonce = web3.eth.get_transaction_count(account.address)
-        tx = {
-            'nonce': nonce,
-            'to': destination,
-            'value': web3.to_wei(amount_eth, 'ether'),
-            'gas': 21000,
-            'gasPrice': web3.eth.gas_price
-        }
-        signed_tx = web3.eth.account.sign_transaction(tx, PRIVATE_KEY_ETH)
-        tx_hash = web3.eth.send_raw_transaction(signed_tx.rawTransaction)
-        return web3.to_hex(tx_hash)
+        return "✅ Signal sent to Telegram"
     except Exception as e:
-        return f"❌ Error: {e}"
-
-# 💬 Telegram Command: /withdraw_eth <wallet> <amount>
-async def withdraw_eth(update, context):
-    try:
-        args = context.args
-        if len(args) != 2:
-            await update.message.reply_text("❗ Format: /withdraw_eth <wallet_address> <amount>")
-            return
-
-        dest_wallet = args[0]
-        amount = float(args[1])
-
-        tx_hash = send_eth(dest_wallet, amount)
-        if tx_hash.startswith("0x"):
-            await update.message.reply_text(f"✅ ETH sent successfully!\nTransaction: https://etherscan.io/tx/{tx_hash}")
-        else:
-            await update.message.reply_text(tx_hash)
-    except Exception as e:
-        await update.message.reply_text(f"⚠️ Error: {e}")
-
-# 🧩 Add command handler
-app.add_handler(CommandHandler("withdraw_eth", withdraw_eth))
-# ✅ TP/SL Voice Alerts – Gool & Guuldarro Codad kala duwan
+        return f"❌ Webhook error: {str(e)}"
+from telegram.constants import ChatAction
 from gtts import gTTS
 import tempfile
-from telegram.constants import ChatAction
-from telegram.ext import CommandHandler
+import os
 
-# 🔊 Play voice alert based on trade result
-async def play_result_voice(result_type: str, context, chat_id: str):
+# Voice Alert Function
+async def send_voice_alert(text: str, context, chat_id: str):
     try:
         await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.RECORD_AUDIO)
-
-        if result_type == "TP":
-            message = "Congratulations! Take Profit hit. Ka-ching!"
-        elif result_type == "SL":
-            message = "Stop Loss hit. Wax meynas galay!"
-        else:
-            message = "Unknown trade result."
-
-        tts = gTTS(message)
-        with tempfile.NamedTemporaryFile(delete=True) as tmp:
-            tts.save(tmp.name + ".mp3")
-            with open(tmp.name + ".mp3", "rb") as audio:
+        tts = gTTS(text)
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=True) as tmp:
+            tts.save(tmp.name)
+            with open(tmp.name, "rb") as audio:
                 await context.bot.send_voice(chat_id=chat_id, voice=audio)
     except Exception as e:
-        print(f"Voice alert error: {e}")
+        print(f"Voice Alert Error: {e}")
+from telegram import Update
+from telegram.ext import CommandHandler, ContextTypes
 
-# ✅ Manual Test Commands: /tp and /sl
-async def tp_alert(update, context):
-    await play_result_voice("TP", context, update.effective_chat.id)
+# ✅ Halal Only Mode toggle state
+halal_only_mode = False
 
-async def sl_alert(update, context):
-    await play_result_voice("SL", context, update.effective_chat.id)
+# ✅ Toggle command: /halalonly
+async def toggle_halal_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global halal_only_mode
+    halal_only_mode = not halal_only_mode
+    status = "✅ Halal Only Mode is ON — Only halal coins will be shown." if halal_only_mode else "❌ Halal Only Mode is OFF — All coins will be shown."
+    await update.message.reply_text(status)
 
-# ✅ Add handlers
-app.add_handler(CommandHandler("tp", tp_alert))
-app.add_handler(CommandHandler("sl", sl_alert))
-from flask import Flask, request
-import requests
+# ✅ Coin checker function (simple haram keyword filter)
+def is_coin_halal(symbol: str) -> bool:
+    haram_keywords = ["casino", "gambling", "loan", "riba", "liquor", "alcohol", "beer"]
+    return not any(word in symbol.lower() for word in haram_keywords)
 import os
+from decimal import Decimal
 
+# ✅ Read from environment or fallback
+ACCOUNT_BALANCE = Decimal(os.getenv("ACCOUNT_BALANCE", "5000"))      # Total account balance
+DAILY_MAX_RISK = Decimal(os.getenv("DAILY_MAX_RISK", "250"))         # Daily risk limit (e.g., 5% of $5,000 = $250)
+
+# ✅ Function: Calculate lot size based on SL pips and pip value
+def calculate_lot_size(sl_distance_pips: float, pip_value: float = 10.0) -> float:
+    if sl_distance_pips == 0:
+        return 0.0  # Avoid division by zero
+    risk_per_trade = DAILY_MAX_RISK
+    lot_size = (risk_per_trade / Decimal(sl_distance_pips)) / Decimal(pip_value)
+    return round(float(lot_size), 2)
+from flask import Flask, request
+from telegram import Update
+import asyncio
+
+from telegram.ext import ApplicationBuilder
+
+# ✅ Flask app + Telegram bot
 flask_app = Flask(__name__)
 
-# ✅ Env setup
-PUSH_APP_WEBHOOK_URL = os.getenv("PUSH_APP_WEBHOOK_URL", "https://your-push-service.com/api/send")
+# ✅ Telegram bot setup
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-# ✅ Push Notification function
-def send_push_notification(title: str, message: str):
-    try:
-        payload = {
-            "title": title,
-            "message": message
-        }
-        headers = {
-            "Content-Type": "application/json"
-        }
-        response = requests.post(PUSH_APP_WEBHOOK_URL, json=payload, headers=headers)
-        print("✅ Push Notification sent:", response.status_code)
-    except Exception as e:
-        print(f"❌ Push Notification Error: {e}")
+# ✅ Home route (for Render)
+@flask_app.route('/')
+def home():
+    return "✅ Hussein7 TradeBot is live!"
 
-# ✅ Webhook endpoint: Signal + Push Notification
-@flask_app.route('/push-signal-webhook', methods=["POST"])
-def push_signal_webhook():
-    try:
-        data = request.get_json()
-        symbol = data.get("symbol", "Unknown")
-        direction = data.get("direction", "BUY")
-        market = data.get("market", "forex")
-        timeframe = data.get("timeframe", "5min")
+# ✅ Telegram webhook handler
+@flask_app.route('/telegram-webhook', methods=["POST"])
+async def telegram_webhook():
+    update = Update.de_json(request.get_json(force=True), app.bot)
+    await app.process_update(update)
+    return "OK"
 
-        title = f"📈 {market.upper()} Signal"
-        message = f"{symbol} → {direction} ({timeframe})"
-
-        # Send push notification
-        send_push_notification(title, message)
-
-        return "✅ Push Notification Sent"
-    except Exception as e:
-        return f"❌ Error in webhook: {str(e)}"
-from fpdf import FPDF
-from datetime import datetime
-import os
-import asyncio
-import pytz
-from telegram.ext import CommandHandler
-
-# ✅ Storage path
-REPORTS_FOLDER = "reports"
-os.makedirs(REPORTS_FOLDER, exist_ok=True)
-
-# ✅ Sample profit log (Replace this with real DB/file read)
-profit_log = []
-
-# ✅ PDF Generation Function
-def generate_daily_report():
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    filename = os.path.join(REPORTS_FOLDER, f"report_{today_str}.pdf")
-    
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
-    pdf.cell(200, 10, txt=f"📊 Daily Trade Report – {today_str}", ln=True, align="C")
-    pdf.ln(10)
-    
-    if not profit_log:
-        pdf.cell(200, 10, txt="No trades recorded today.", ln=True)
-    else:
-        for idx, entry in enumerate(profit_log, 1):
-            pdf.cell(200, 10, txt=f"{idx}. {entry}", ln=True)
-
-    pdf.output(filename)
-    return filename
-
-# ✅ Manual Command: /report
-async def send_report(update, context):
-    file_path = generate_daily_report()
-    with open(file_path, 'rb') as pdf_file:
-        await update.message.reply_document(pdf_file, filename=os.path.basename(file_path))
-
-# ✅ Add command to bot
-app.add_handler(CommandHandler("report", send_report))
-
-# ✅ Automatic Scheduler (every 23:59)
-async def schedule_daily_report(context):
-    while True:
-        now = datetime.now(pytz.timezone("Africa/Nairobi"))
-        target_time = now.replace(hour=23, minute=59, second=0, microsecond=0)
-        if now > target_time:
-            target_time = target_time.replace(day=now.day + 1)
-        wait_seconds = (target_time - now).total_seconds()
-        await asyncio.sleep(wait_seconds)
-
-        # Send report to main chat
-        file_path = generate_daily_report()
-        chat_id = os.getenv("CHAT_ID")
-        if chat_id:
-            with open(file_path, 'rb') as pdf_file:
-                await context.bot.send_document(chat_id=chat_id, document=pdf_file, filename=os.path.basename(file_path))
-
-# ✅ Launch scheduler in background
-app.job_queue.run_once(lambda ctx: asyncio.create_task(schedule_daily_report(ctx)), when=0)
-from telegram.ext import CallbackQueryHandler, CommandHandler
-from datetime import datetime
-
-# ✅ In-memory confirmed trades list (can be saved to file or DB)
-confirmed_trades = []
-
-# ✅ Callback handler for confirmation button
-async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    if query.data.startswith("CONFIRM:"):
-        _, symbol, direction = query.data.split(":")
-        entry = f"{datetime.now().strftime('%Y-%m-%d %H:%M')} - {symbol} {direction}"
-        confirmed_trades.append(entry)
-        await query.edit_message_text(text=f"✅ Trade confirmed:\n{entry}")
-
-    elif query.data == "IGNORE":
-        await query.edit_message_text(text="❌ Signal ignored.")
-
-# ✅ Add handler to app
-app.add_handler(CallbackQueryHandler(handle_callback))
-
-# ✅ /confirmed command – Show list of confirmed trades
-async def show_confirmed_trades(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not confirmed_trades:
-        await update.message.reply_text("⚠️ No trades confirmed yet.")
-    else:
-        text = "📋 *Confirmed Trades List:*\n"
-        text += "\n".join(f"{i+1}. {t}" for i, t in enumerate(confirmed_trades))
-        await update.message.reply_text(text, parse_mode="Markdown")
-
-# ✅ Add /confirmed command to bot
-app.add_handler(CommandHandler("confirmed", show_confirmed_trades))
-import requests
-from io import BytesIO
-from PIL import Image
-from telegram import InputFile
-
-# ✅ Sample function to render a chart using third-party API or webhook
-def get_chart_image(symbol: str, timeframe: str = "5m") -> BytesIO:
-    # Tusaale API image URL – beddel haddii aad leedahay API kale
-    url = f"https://quickchart.io/chart?c={{type:'line',data:{{labels:['1','2','3'],datasets:[{{label:'{symbol}',data:[1,2,3]}}]}}}}"
-    response = requests.get(url)
-    if response.status_code != 200:
-        raise Exception("Chart image fetch failed")
-    return BytesIO(response.content)
-
-# ✅ Usage inside signal webhook
-def get_coin_type_label(coin_name: str) -> str:
-    if "break" in coin_name.lower():
-        return "📈 Breakout"
-    elif "volume" in coin_name.lower():
-        return "🔥 High Volume"
-    else:
-        return "🪙 Coin"
-
-@flask_app.route('/signal-webhook', methods=['POST'])
+# ✅ Signal webhook endpoint (for JSON signals from TradingView, Notion, etc.)
+@flask_app.route('/signal-webhook', methods=["POST"])
 def signal_webhook():
     try:
         data = request.get_json()
         symbol = data.get("symbol", "Unknown")
         direction = data.get("direction", "BUY")
         timeframe = data.get("timeframe", "5min")
-        market = data.get("market", "crypto")
+        market = data.get("market", "forex")
 
-        label = get_coin_type_label(symbol)
-        halal_status = "🟢 Halal" if is_coin_halal(symbol) else "🔴 Haram"
-
-        msg = f"{label} Signal 📊\nCoin: {symbol}\nTimeframe: {timeframe}\nDirection: {direction}\nStatus: {halal_status}"
-
-        chart_image = get_chart_image(symbol)
-        chat_id = os.getenv("CHAT_ID", "YOUR_CHAT_ID")
+        message = f"🚨 New {market.upper()} Signal\nPair: {symbol}\nTime: {timeframe}\nDirection: {direction}"
         
-        app.bot.send_photo(chat_id=chat_id, photo=InputFile(chart_image, filename=f"{symbol}_chart.png"), caption=msg)
+        # Optional: add button handler here
 
-        return "Signal with chart sent"
+        chat_id = os.getenv("CHAT_ID", "YOUR_CHAT_ID")
+        app.bot.send_message(chat_id=chat_id, text=message)
+        return "Signal Sent"
     except Exception as e:
         return f"Webhook error: {str(e)}"
-from datetime import datetime, timedelta
-import json
+
+# ✅ Start webhook on boot
+async def run():
+    await app.bot.set_webhook(url=os.getenv("WEBHOOK_URL"))
+
+if __name__ == "__main__":
+    asyncio.run(run())
+    flask_app.run(host="0.0.0.0", port=10000)
+from gtts import gTTS
+from telegram.constants import ChatAction
+import tempfile
 import os
 
-# Faylka la keydiyo profits
-PROFIT_FILE = "profits.json"
-GOAL_AMOUNT = float(os.getenv("PROFIT_GOAL_AMOUNT", 650))
-GOAL_DAYS = int(os.getenv("PROFIT_GOAL_DAYS", 10))
-
-# ✅ Helper function: save profit
-def save_profit(amount):
+# ✅ Voice Alert Function
+async def send_voice_alert(text, context, chat_id):
     try:
-        if not os.path.exists(PROFIT_FILE):
-            with open(PROFIT_FILE, "w") as f:
-                json.dump([], f)
-        with open(PROFIT_FILE, "r") as f:
-            data = json.load(f)
-        data.append({"amount": amount, "date": datetime.now().isoformat()})
-        with open(PROFIT_FILE, "w") as f:
-            json.dump(data, f)
+        # Show user that bot is recording
+        await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.RECORD_AUDIO)
+
+        # Create TTS audio
+        tts = gTTS(text)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
+            tts.save(tmp_file.name)
+            with open(tmp_file.name, 'rb') as audio:
+                await context.bot.send_voice(chat_id=chat_id, voice=audio)
+        os.remove(tmp_file.name)
     except Exception as e:
-        print(f"Profit Save Error: {e}")
-
-# ✅ Helper function: get progress
-def get_goal_progress():
-    try:
-        if not os.path.exists(PROFIT_FILE):
-            return 0.0, 0
-        with open(PROFIT_FILE, "r") as f:
-            data = json.load(f)
-        start_date = datetime.now() - timedelta(days=GOAL_DAYS)
-        recent_profits = [
-            float(x["amount"]) for x in data
-            if datetime.fromisoformat(x["date"]) >= start_date
-        ]
-        total = sum(recent_profits)
-        remaining = max(GOAL_AMOUNT - total, 0)
-        return total, remaining
-    except Exception as e:
-        print(f"Progress Error: {e}")
-        return 0.0, GOAL_AMOUNT
-
-# ✅ Command: /profit <amount>
-async def add_profit(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        amount = float(context.args[0])
-        save_profit(amount)
-        total, remaining = get_goal_progress()
-        await update.message.reply_text(
-            f"💰 Profit added: ${amount:.2f}\n📈 Progress: ${total:.2f} / ${GOAL_AMOUNT}\n⏳ Remaining: ${remaining:.2f}"
-        )
-    except Exception as e:
-        await update.message.reply_text("Usage: /profit 50.00")
-
-# ✅ Command: /profits (view progress only)
-async def view_progress(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    total, remaining = get_goal_progress()
-    await update.message.reply_text(
-        f"📊 Goal Progress\nTarget: ${GOAL_AMOUNT:.2f} in {GOAL_DAYS} days\nProgress: ${total:.2f}\nRemaining: ${remaining:.2f}"
-    )
-
-# ✅ Handlers
-app.add_handler(CommandHandler("profit", add_profit))
-app.add_handler(CommandHandler("profits", view_progress))
-# ✅ Cutubka 21: Bot UI Buttons – Mute, Market Filter, Halal Toggle, Search
-from telegram.ext import CommandHandler
+        print(f"Voice Alert Error: {e}")
+import os
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import CommandHandler, ContextTypes
 from telegram import Update
-from telegram.ext import ContextTypes
 
-# ✅ Voice Alerts Toggle
-voice_alerts_enabled = True
-
-async def toggle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global voice_alerts_enabled
-    voice_alerts_enabled = not voice_alerts_enabled
-    state = "🔊 Voice Alerts ON" if voice_alerts_enabled else "🔇 Voice Alerts OFF"
-    await update.message.reply_text(state)
-
-app.add_handler(CommandHandler("mute", toggle_voice))
-
-# ✅ Market Filter (Forex, Crypto, etc.)
-visible_markets = {
-    "forex": True,
-    "crypto": True,
-    "stocks": True,
-    "polymarket": True,
-    "memecoins": True,
-}
-
-async def toggle_market(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        market = context.args[0].lower()
-        if market in visible_markets:
-            visible_markets[market] = not visible_markets[market]
-            state = "✅ ON" if visible_markets[market] else "❌ OFF"
-            await update.message.reply_text(f"{market.upper()} visibility: {state}")
-        else:
-            await update.message.reply_text("Unknown market. Use one of: forex, crypto, stocks, polymarket, memecoins")
-    except:
-        await update.message.reply_text("Usage: /togglemarket forex")
-
-app.add_handler(CommandHandler("togglemarket", toggle_market))
-
-# ✅ Halal Filter Toggle (Already Exists in Cutubka 9, reused here)
+# ✅ Halal Filter State (global)
 halal_only_mode = False
 
+# ✅ Halal/Haram Checker
+def is_coin_halal(name: str) -> bool:
+    haram_keywords = ["casino", "gambling", "riba", "loan", "liquor", "beer", "alcohol", "porn", "sex", "pepe"]
+    return not any(x in name.lower() for x in haram_keywords)
+
+# ✅ /halalonly toggle command
 async def toggle_halal_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global halal_only_mode
     halal_only_mode = not halal_only_mode
     status = "✅ Halal Only Mode ON" if halal_only_mode else "❌ Halal Only Mode OFF"
-    await update.message.reply_text(f"{status}")
+    await update.message.reply_text(status)
 
-app.add_handler(CommandHandler("halalonly", toggle_halal_only))
+# ✅ Memecoin Signal Handler (Webhook-style)
+async def send_memecoin_signal(context: ContextTypes.DEFAULT_TYPE, coin_data: dict):
+    name = coin_data.get("name", "Unknown")
+    address = coin_data.get("address", "N/A")
+    chain = coin_data.get("chain", "Solana")
+    reason = coin_data.get("reason", "🚀 Social spike")
+    chart_url = coin_data.get("chart", "https://dexscreener.com/")
 
-# ✅ Search Function (Symbol / Coin)
-sample_signals = [
-    {"symbol": "EURUSD", "market": "forex", "direction": "BUY"},
-    {"symbol": "SOL", "market": "crypto", "direction": "SELL"},
-    {"symbol": "TSLA", "market": "stocks", "direction": "BUY"},
+    # Halal filter check
+    if halal_only_mode and not is_coin_halal(name):
+        return
+
+    status = "🟢 Halal" if is_coin_halal(name) else "🔴 Haram"
+
+    msg = f"🚨 *New Memecoin Detected!*\n\n💎 *{name}*\n🔗 Chain: {chain}\n🪙 Address: `{address}`\n📈 Reason: {reason}\n🔍 Status: {status}\n📊 Chart: {chart_url}"
+
+    buttons = [[
+        InlineKeyboardButton("📈 View Chart", url=chart_url),
+        InlineKeyboardButton("📥 Copy Address", callback_data=f"copy:{address}")
+    ]]
+    reply_markup = InlineKeyboardMarkup(buttons)
+
+    chat_id = os.getenv("CHAT_ID", "YOUR_CHAT_ID")
+    await context.bot.send_message(chat_id=chat_id, text=msg, reply_markup=reply_markup, parse_mode="Markdown")
+from web3 import Web3
+from telegram.ext import CommandHandler, ContextTypes
+from telegram import Update
+import os
+
+# ✅ Setup Web3 connection (Infura)
+INFURA_URL = os.getenv("INFURA_URL")
+w3 = Web3(Web3.HTTPProvider(INFURA_URL))
+
+# ✅ Wallet details
+BOT_WALLET = os.getenv("WALLET_ADDRESS_ETH")
+BOT_PRIVATE_KEY = os.getenv("PRIVATE_KEY_ETH")
+WITHDRAW_TO = os.getenv("WITHDRAW_TO", "0xReceiverWalletAddressHere")
+
+# ✅ /withdraw_eth command
+async def withdraw_eth(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        sender_address = BOT_WALLET
+        receiver_address = WITHDRAW_TO
+
+        # ✅ Check balance
+        balance = w3.eth.get_balance(sender_address)
+        eth_balance = w3.from_wei(balance, 'ether')
+
+        if eth_balance < 0.002:
+            await update.message.reply_text("❌ Not enough ETH to withdraw. Minimum 0.002 ETH required.")
+            return
+
+        # ✅ Prepare transaction
+        nonce = w3.eth.get_transaction_count(sender_address)
+        gas_price = w3.eth.gas_price
+        value = balance - (21000 * gas_price)  # Leave enough for gas
+
+        tx = {
+            'nonce': nonce,
+            'to': receiver_address,
+            'value': value,
+            'gas': 21000,
+            'gasPrice': gas_price,
+        }
+
+        # ✅ Sign + send transaction
+        signed_tx = w3.eth.account.sign_transaction(tx, private_key=BOT_PRIVATE_KEY)
+        tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+
+        await update.message.reply_text(f"✅ ETH Withdrawn\n🔗 TX Hash: {w3.to_hex(tx_hash)}")
+
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error during withdrawal: {str(e)}")
+from telegram.constants import ChatAction
+from telegram.ext import ContextTypes
+from telegram import Update
+from gtts import gTTS
+import tempfile
+import os
+
+# ✅ Cod kala duwan oo loogu talagalay TP (guul) iyo SL (khasaaro)
+def get_voice_text(status):
+    if status == "TP":
+        return "Congratulations! Take Profit hit! 💰"
+    elif status == "SL":
+        return "Stop Loss hit. Wax meynas galay... 😢"
+    else:
+        return "New signal alert."
+
+# ✅ Voice alert function
+async def send_result_voice(status: str, context: ContextTypes.DEFAULT_TYPE, chat_id: int):
+    try:
+        await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.RECORD_AUDIO)
+        text = get_voice_text(status)
+
+        tts = gTTS(text=text, lang='en')
+        with tempfile.NamedTemporaryFile(delete=True) as tmp:
+            tts.save(tmp.name + ".mp3")
+            with open(tmp.name + ".mp3", "rb") as audio_file:
+                await context.bot.send_voice(chat_id=chat_id, voice=audio_file)
+    except Exception as e:
+        print(f"[Voice Alert Error]: {e}")
+import requests
+import os
+
+# ✅ URL-ka push app webhook (ka ku qor .env file)
+PUSH_APP_WEBHOOK_URL = os.getenv("PUSH_APP_WEBHOOK_URL")
+
+# ✅ Function: Dir push notification (text only)
+def send_push_notification(message: str) -> str:
+    try:
+        if not PUSH_APP_WEBHOOK_URL:
+            raise ValueError("PUSH_APP_WEBHOOK_URL not set.")
+
+        payload = {
+            "title": "📢 Hussein7 Trade Alert",
+            "message": message
+        }
+
+        response = requests.post(PUSH_APP_WEBHOOK_URL, json=payload)
+        if response.status_code == 200:
+            return "✅ Push sent"
+        else:
+            return f"❌ Push failed: {response.text}"
+    except Exception as e:
+        return f"[Push Error]: {e}"
+from fpdf import FPDF
+import os
+from datetime import datetime
+from telegram.ext import CommandHandler
+from telegram import Update
+from telegram.ext import ContextTypes
+from apscheduler.schedulers.background import BackgroundScheduler
+
+# ✅ Folder-ka warbixinada
+REPORTS_DIR = "reports"
+os.makedirs(REPORTS_DIR, exist_ok=True)
+
+# ✅ Diiwaanka ganacsiyada maalinlaha ah
+trade_log = []
+
+# ✅ Function: Abuur report PDF
+def generate_daily_report(trades: list):
+    today = datetime.now().strftime("%Y-%m-%d")
+    filename = f"{REPORTS_DIR}/TradeReport_{today}.pdf"
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt=f"📄 Trade Report – {today}", ln=True, align="C")
+    pdf.ln(10)
+
+    for i, trade in enumerate(trades, 1):
+        text = (
+            f"{i}. Pair: {trade['symbol']}\n"
+            f"   Direction: {trade['direction']}\n"
+            f"   Timeframe: {trade['timeframe']}\n"
+            f"   Result: {trade['result']}\n"
+            f"   P&L: {trade['pnl']}\n"
+        )
+        pdf.multi_cell(0, 10, txt=text)
+        pdf.ln(2)
+
+    pdf.output(filename)
+    return filename
+
+# ✅ Telegram command: /report
+async def send_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not trade_log:
+        await update.message.reply_text("Ma jiro trade maanta la qaaday.")
+        return
+
+    file_path = generate_daily_report(trade_log)
+    with open(file_path, "rb") as f:
+        await context.bot.send_document(chat_id=update.effective_chat.id, document=f, filename=file_path)
+
+app.add_handler(CommandHandler("report", send_report))
+
+# ✅ Jadwal: Automatic report 23:59 habeenkii
+scheduler = BackgroundScheduler()
+
+def daily_report_job():
+    if trade_log:
+        path = generate_daily_report(trade_log)
+        # Optional: send to Telegram or email (add logic here)
+
+scheduler.add_job(daily_report_job, "cron", hour=23, minute=59)
+scheduler.start()
+import requests
+from datetime import datetime
+import os
+
+# ✅ ENV Variables
+NOTION_API_TOKEN = os.getenv("NOTION_API_TOKEN")
+NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
+
+headers = {
+    "Authorization": f"Bearer {NOTION_API_TOKEN}",
+    "Content-Type": "application/json",
+    "Notion-Version": "2022-06-28"
+}
+
+def push_trade_to_notion(symbol, direction, timeframe, result, pnl):
+    url = "https://api.notion.com/v1/pages"
+    payload = {
+        "parent": {"database_id": NOTION_DATABASE_ID},
+        "properties": {
+            "Date": {
+                "date": {"start": datetime.now().strftime("%Y-%m-%d")}
+            },
+            "Symbol": {
+                "title": [{"text": {"content": symbol}}]
+            },
+            "Direction": {
+                "rich_text": [{"text": {"content": direction}}]
+            },
+            "Timeframe": {
+                "rich_text": [{"text": {"content": timeframe}}]
+            },
+            "Result": {
+                "rich_text": [{"text": {"content": result}}]
+            },
+            "P&L": {
+                "number": float(pnl)
+            }
+        }
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+    if response.status_code != 200:
+        print("❌ Notion Push Failed:", response.text)
+    else:
+        print("✅ Trade pushed to Notion.")
+
+# ✅ Example usage
+# push_trade_to_notion("EURUSD", "BUY", "5min", "WIN", 150.25)
+# ✅ Halal/Haram Coin Detector (Advanced)
+import re
+
+# Liiska erayada haramta ah
+HARAM_KEYWORDS = [
+    "casino", "bet", "gambling", "poker", "lottery", "loan", "riba", "interest",
+    "liquor", "alcohol", "wine", "beer", "vodka", "whiskey", "xxx", "sex", "porn",
+    "shisha", "cigarette", "hookah", "rum", "cocktail", "drunk", "bar"
 ]
 
-async def search_signal(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        query = context.args[0].upper()
-        matches = [s for s in sample_signals if query in s["symbol"]]
-        if matches:
-            for m in matches:
-                await update.message.reply_text(f"{m['market'].upper()} Signal\nSymbol: {m['symbol']}\nDirection: {m['direction']}")
+# ✅ Function: go'aami haddii coin uu halal yahay iyadoo la eegayo magaca + sharaxaadiisa
+def is_coin_halal_advanced(name: str, description: str = "") -> bool:
+    combined_text = f"{name} {description}".lower()
+    for haram_word in HARAM_KEYWORDS:
+        if re.search(rf"\b{haram_word}\b", combined_text):
+            return False
+    return True
+
+# ✅ Tusaale Isticmaal (console test)
+coin_name = "LuckyBetToken"
+coin_description = "A high-volume gambling dApp token"
+
+status = "🟢 Halal" if is_coin_halal_advanced(coin_name, coin_description) else "🔴 Haram"
+print(f"Token: {coin_name} → Status: {status}")
+
+# ✅ Telegram bot integration (example inside your signal sender)
+if halal_only_mode:
+    if not is_coin_halal_advanced(coin_name, coin_description):
+        return  # Ha dirin haddii coin-ku haram yahay marka toggle ON
+
+msg = f"🚨 {coin_name} Opportunity\nStatus: {'🟢 Halal' if is_coin_halal_advanced(coin_name, coin_description) else '🔴 Haram'}"
+await context.bot.send_message(chat_id=chat_id, text=msg)
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import CallbackContext, CommandHandler, CallbackQueryHandler
+
+# ✅ Global state
+halal_only_mode = False
+
+# ✅ Command: /halalonly – toggle button ON/OFF
+async def toggle_halal_only(update: Update, context: CallbackContext):
+    global halal_only_mode
+    halal_only_mode = not halal_only_mode
+    status = "🟢 Halal Only Mode ENABLED" if halal_only_mode else "🔴 Halal Only Mode DISABLED"
+    await update.message.reply_text(status)
+
+# ✅ Coin Checker Function (reuse from Cutubka 19)
+def is_coin_halal(name: str, description: str = "") -> bool:
+    haram_keywords = [
+        "casino", "bet", "gambling", "poker", "lottery", "loan", "riba", "interest",
+        "liquor", "alcohol", "wine", "beer", "vodka", "whiskey", "xxx", "sex", "porn",
+        "shisha", "cigarette", "hookah", "rum", "cocktail", "drunk", "bar"
+    ]
+    full = f"{name} {description}".lower()
+    return not any(word in full for word in haram_keywords)
+
+# ✅ Use this in memecoin signal webhook
+def send_coin_signal(coin_name, description, context, chat_id):
+    global halal_only_mode
+
+    if halal_only_mode and not is_coin_halal(coin_name, description):
+        print(f"🔴 Skipped haram coin: {coin_name}")
+        return  # Ha dirin haddii haram yahay
+
+    msg = f"🚨 Memecoin Alert: {coin_name}\nStatus: {'🟢 Halal' if is_coin_halal(coin_name, description) else '🔴 Haram'}"
+    buttons = [[
+        InlineKeyboardButton("✅ Buy Now", callback_data=f"BUY:{coin_name}"),
+        InlineKeyboardButton("🚫 Skip", callback_data="SKIP")
+    ]]
+    markup = InlineKeyboardMarkup(buttons)
+    context.bot.send_message(chat_id=chat_id, text=msg, reply_markup=markup)
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import CallbackContext, CommandHandler, CallbackQueryHandler
+
+# ✅ Global state
+hidden_markets = set()
+
+# ✅ Toggle Market Visibility
+async def toggle_market_visibility(update: Update, context: CallbackContext):
+    markets = ["Forex", "Crypto", "Stocks", "Polymarket", "Memecoins"]
+    buttons = []
+
+    for mkt in markets:
+        is_hidden = mkt.lower() in hidden_markets
+        label = f"{'❌' if is_hidden else '✅'} {mkt}"
+        buttons.append([InlineKeyboardButton(label, callback_data=f"TOGGLE_MARKET:{mkt.lower()}")])
+
+    reply_markup = InlineKeyboardMarkup(buttons)
+    await update.message.reply_text("Toggle Market Visibility:", reply_markup=reply_markup)
+
+# ✅ Callback Handler
+async def handle_toggle_market_callback(update: Update, context: CallbackContext):
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data.split(":")
+    if data[0] == "TOGGLE_MARKET":
+        market = data[1]
+        if market in hidden_markets:
+            hidden_markets.remove(market)
+            await query.edit_message_text(f"✅ {market.capitalize()} market is now **VISIBLE**.")
         else:
-            await update.message.reply_text("No matching signal found.")
+            hidden_markets.add(market)
+            await query.edit_message_text(f"❌ {market.capitalize()} market is now **HIDDEN**.")
+
+# ✅ Usage in webhook (Forex example)
+def send_forex_signal(symbol, direction, context, chat_id):
+    if "forex" in hidden_markets:
+        print(f"📵 Skipped {symbol} – Forex hidden")
+        return
+    message = f"📈 Forex Signal: {symbol} → {direction}"
+    context.bot.send_message(chat_id=chat_id, text=message)
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton, Update
+from telegram.ext import CommandHandler, MessageHandler, CallbackContext, filters
+
+# ✅ Command: /search
+async def search_command(update: Update, context: CallbackContext):
+    await update.message.reply_text("🔍 Please type the symbol or coin name you want to search.")
+
+# ✅ Text Handler: Receives Search Query
+async def handle_search_query(update: Update, context: CallbackContext):
+    query = update.message.text.strip().upper()
+
+    # Example fake signal DB
+    fake_signals = {
+        "EURUSD": {"market": "forex", "dir": "BUY", "tf": "5min"},
+        "BTC": {"market": "crypto", "dir": "SELL", "tf": "15min"},
+        "TSLA": {"market": "stocks", "dir": "BUY", "tf": "1H"},
+        "TRUMP2024": {"market": "polymarket", "dir": "YES", "tf": "Event"},
+    }
+
+    if query in fake_signals:
+        signal = fake_signals[query]
+        message = f"🔍 Found Signal\nMarket: {signal['market'].capitalize()}\nSymbol: {query}\nDirection: {signal['dir']}\nTimeframe: {signal['tf']}"
+    else:
+        message = f"❌ No signal found for {query}"
+
+    await update.message.reply_text(message)
+from telegram import Update
+from telegram.ext import CommandHandler, ContextTypes
+
+# ✅ ICT Filter ON/OFF state
+ict_filter_enabled = True
+
+# ✅ Toggle command: /ictfilter
+async def toggle_ict_filter(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global ict_filter_enabled
+    ict_filter_enabled = not ict_filter_enabled
+    status = "✅ ICT Filter ENABLED" if ict_filter_enabled else "❌ ICT Filter DISABLED"
+    await update.message.reply_text(f"{status}\nOnly high-probability ICT-style Forex trades will be shown.")
+
+
+# ✅ ICT-style detection logic (very basic sample)
+def is_ict_compliant(signal: dict) -> bool:
+    """
+    Signal example:
+    {
+        "symbol": "EURUSD",
+        "direction": "BUY",
+        "timeframe": "5min",
+        "market": "forex",
+        "liquidity": "grabbed",
+        "order_block": True,
+        "fvg": True,
+        "time": "10:15"
+    }
+    """
+    return (
+        signal.get("market") == "forex"
+        and signal.get("order_block") is True
+        and signal.get("fvg") is True
+        and signal.get("liquidity") == "grabbed"
+    )
+
+
+# ✅ Example usage inside signal webhook:
+def should_send_signal(signal: dict) -> bool:
+    if ict_filter_enabled and signal.get("market") == "forex":
+        return is_ict_compliant(signal)
+    return True  # send others like crypto/stocks/etc.
+from telegram import Update
+from telegram.ext import CommandHandler, ContextTypes
+from datetime import datetime, timedelta
+
+# Goal Tracker
+GOAL_AMOUNT = 650  # USD
+GOAL_DAYS = 10
+START_DATE = datetime(2025, 6, 20)
+goal_progress = []  # Each element is (date_str, profit)
+
+def calculate_goal_status():
+    total_profit = sum(p[1] for p in goal_progress)
+    days_passed = (datetime.now() - START_DATE).days + 1
+    daily_target = GOAL_AMOUNT / GOAL_DAYS
+    projected = days_passed * daily_target
+    percent = round((total_profit / GOAL_AMOUNT) * 100, 1)
+    return total_profit, projected, percent, days_passed
+
+# ✅ Command: /goal
+async def goal_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    total_profit, projected, percent, days_passed = calculate_goal_status()
+    status = (
+        f"🎯 *Goal Tracker*\n"
+        f"Duration: {GOAL_DAYS} days\n"
+        f"Goal: ${GOAL_AMOUNT}\n"
+        f"Day: {days_passed}\n"
+        f"Progress: ${total_profit:.2f} / ${GOAL_AMOUNT}\n"
+        f"Projected by now: ${projected:.2f}\n"
+        f"Completion: {percent}%"
+    )
+    await update.message.reply_text(status, parse_mode="Markdown")
+
+# ✅ Command: /addprofit <amount>
+async def add_profit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        amount = float(context.args[0])
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        goal_progress.append((today_str, amount))
+        await update.message.reply_text(f"✅ Added profit: ${amount:.2f}")
+    except Exception:
+        await update.message.reply_text("❌ Usage: /addprofit 100")
+from telegram import Update
+from telegram.ext import CommandHandler, ContextTypes
+from datetime import datetime, timedelta
+
+# 🎯 Bartilmaameedka
+GOAL_AMOUNT = 650   # Tirada guud ee la rabo ($)
+GOAL_DAYS = 10      # Muddada
+START_DATE = datetime(2025, 6, 20)  # Waxaad beddeli kartaa bilowga
+goal_progress = []  # Liiska waxqabadka: (date_str, amount)
+
+def calculate_goal_status():
+    total_profit = sum(p[1] for p in goal_progress)
+    days_passed = (datetime.now() - START_DATE).days + 1
+    daily_target = GOAL_AMOUNT / GOAL_DAYS
+    projected = days_passed * daily_target
+    percent = round((total_profit / GOAL_AMOUNT) * 100, 1)
+    return total_profit, projected, percent, days_passed
+
+# ✅ Amarka: /goal
+async def goal_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    total_profit, projected, percent, days_passed = calculate_goal_status()
+    msg = (
+        f"🎯 *Goal Tracker*\n"
+        f"Target: ${GOAL_AMOUNT} in {GOAL_DAYS} days\n"
+        f"Day: {days_passed}\n"
+        f"Profit: ${total_profit:.2f}\n"
+        f"Expected so far: ${projected:.2f}\n"
+        f"Completion: {percent}%"
+    )
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
+# ✅ Amarka: /addprofit <amount>
+async def add_profit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        amount = float(context.args[0])
+        today = datetime.now().strftime("%Y-%m-%d")
+        goal_progress.append((today, amount))
+        await update.message.reply_text(f"✅ Added ${amount:.2f} to progress.")
+    except Exception as e:
+        await update.message.reply_text("❌ Usage: /addprofit 120")
+from telegram import Update
+from telegram.ext import CommandHandler, ContextTypes
+from fpdf import FPDF
+from datetime import datetime
+import os
+
+# 📊 Ku kaydi profits meel memory ah
+daily_profits = []  # Format: [("2025-06-25", 120), ("2025-06-26", 80)]
+
+# ✅ Amarka /profit <lacag>
+async def log_profit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        amount = float(context.args[0])
+        today = datetime.now().strftime("%Y-%m-%d")
+        daily_profits.append((today, amount))
+        await update.message.reply_text(f"✅ Profit ${amount} added for {today}")
     except:
-        await update.message.reply_text("Usage: /search EURUSD")
+        await update.message.reply_text("❌ Usage: /profit 100")
 
-app.add_handler(CommandHandler("search", search_signal))
-# ✅ ICT Forex Style Filter Integration
+# ✅ Amarka /profits – tus liiska
+async def view_profits(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not daily_profits:
+        await update.message.reply_text("📭 Ma jiraan wax profit ah wali.")
+        return
 
+    msg = "*📈 Daily Profits:*\n\n"
+    total = 0
+    for date, amt in daily_profits:
+        msg += f"- {date}: ${amt:.2f}\n"
+        total += amt
+    msg += f"\n*Total: ${total:.2f}*"
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
+# ✅ Amarka /report – soo saar PDF
+async def generate_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not daily_profits:
+        await update.message.reply_text("📭 Ma jiraan wax profit ah si PDF loogu sameeyo.")
+        return
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+
+    pdf.cell(200, 10, txt="📊 Daily Profit Report", ln=1, align="C")
+    pdf.ln(10)
+
+    total = 0
+    for date, amt in daily_profits:
+        pdf.cell(200, 10, txt=f"{date}: ${amt:.2f}", ln=1)
+        total += amt
+
+    pdf.ln(5)
+    pdf.cell(200, 10, txt=f"TOTAL PROFIT: ${total:.2f}", ln=1)
+
+    filename = f"profit_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    pdf.output(filename)
+
+    with open(filename, "rb") as f:
+        await update.message.reply_document(document=f)
+
+    os.remove(filename)
+import schedule
+import time
+from datetime import datetime
+from telegram import Bot
+import threading
+
+# ✅ Ku keydi signal count
+signals_today = 0
+
+# ✅ Markasta signal lasoo diro, ku dar hal
+def signal_received():
+    global signals_today
+    signals_today += 1
+
+# ✅ Reset count @midnight
+def reset_signal_count():
+    global signals_today
+    signals_today = 0
+
+# ✅ Haddii wax signal ah aysan imaanin, bot ha soo diro xasuusin
+def check_signals_and_remind():
+    if signals_today == 0:
+        msg = "📭 Ma jiro signal maanta. Fadlan hubi haddii wax khalad ah jiro ama suuqu xiran yahay."
+        bot.send_message(chat_id=os.getenv("CHAT_ID"), text=msg)
+
+# ✅ Jadwal maalinle ah
+schedule.every().day.at("23:59").do(check_signals_and_remind)
+schedule.every().day.at("00:00").do(reset_signal_count)
+
+# ✅ Jadwal thread
+def run_schedule():
+    while True:
+        schedule.run_pending()
+        time.sleep(30)
+
+# ✅ Samee thread gaar ah
+threading.Thread(target=run_schedule, daemon=True).start()
+
+# ✅ Bot access
+bot = Bot(token=os.getenv("TELEGRAM_TOKEN"))
+from telegram.ext import CommandHandler, CallbackContext
+from telegram import Update
+from web3 import Web3
+import os
+
+# ✅ Setup Web3
+INFURA_URL = os.getenv("INFURA_URL")
+PRIVATE_KEY = os.getenv("PRIVATE_KEY_ETH")
+BOT_WALLET_ADDRESS = os.getenv("WALLET_ADDRESS_ETH")
+web3 = Web3(Web3.HTTPProvider(INFURA_URL))
+
+# ✅ ETH Withdrawal Command
+async def withdraw_eth(update: Update, context: CallbackContext):
+    try:
+        target_address = context.args[0]
+        amount = float(context.args[1])
+
+        nonce = web3.eth.get_transaction_count(BOT_WALLET_ADDRESS)
+        tx = {
+            'nonce': nonce,
+            'to': target_address,
+            'value': web3.to_wei(amount, 'ether'),
+            'gas': 21000,
+            'gasPrice': web3.to_wei('20', 'gwei')
+        }
+
+        signed_tx = web3.eth.account.sign_transaction(tx, PRIVATE_KEY)
+        tx_hash = web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        await update.message.reply_text(f"✅ ETH withdrawal sent!\nTransaction: https://etherscan.io/tx/{web3.to_hex(tx_hash)}")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {str(e)}")
+
+# ✅ Balance Check Command
+async def eth_balance(update: Update, context: CallbackContext):
+    try:
+        balance = web3.eth.get_balance(BOT_WALLET_ADDRESS)
+        eth = web3.from_wei(balance, 'ether')
+        await update.message.reply_text(f"💰 Current ETH balance: {eth} ETH")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error checking balance: {str(e)}")
 from telegram.ext import CommandHandler
 from telegram import Update
 from telegram.ext import ContextTypes
 
-# Toggle flag
-ict_mode_enabled = True
+# Temporary memory (RAM-based)
+user_wallets = {}
 
-# ✅ Toggle Command
-async def toggle_ict_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global ict_mode_enabled
-    ict_mode_enabled = not ict_mode_enabled
-    state = "✅ ICT Filter ON" if ict_mode_enabled else "❌ ICT Filter OFF"
-    await update.message.reply_text(state)
+# ✅ /wallet ETH 0x123... | /wallet SOL yourSolAddress
+async def set_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    args = context.args
 
-app.add_handler(CommandHandler("ictmode", toggle_ict_mode))
+    if len(args) != 2:
+        await update.message.reply_text("💡 Isticmaal sidaan: /wallet ETH 0xYourWallet\nAma: /wallet SOL YourSolAddress")
+        return
 
-# ✅ Example ICT Style Criteria
-def matches_ict_criteria(signal: dict) -> bool:
-    """
-    Sample logic:
-    Only allow:
-    - Timeframe = 5min
-    - Direction must be 'BUY' at discount or 'SELL' at premium (mocked here)
-    """
-    if signal["market"] != "forex":
-        return True  # Only apply filter to Forex
+    chain, address = args
+    if chain.upper() not in ["ETH", "SOL"]:
+        await update.message.reply_text("❌ Fadlan dooro ETH ama SOL oo kaliya.")
+        return
 
-    # Mocked logic for now (you can improve with real ICT concepts later)
-    allowed_timeframes = ["5min"]
-    direction = signal.get("direction", "").upper()
-    symbol = signal.get("symbol", "")
+    user_wallets[user_id] = {"chain": chain.upper(), "address": address}
+    await update.message.reply_text(f"✅ Wallet-kaaga {chain.upper()} waa la keydiyay: {address}")
 
-    if signal.get("timeframe", "") not in allowed_timeframes:
-        return False
+# ✅ /mywallet – View stored wallet
+async def view_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    wallet = user_wallets.get(user_id)
 
-    # Simulated example: Accept EURUSD only if BUY
-    if symbol == "EURUSD" and direction == "BUY":
-        return True
-    return False
-
-# ✅ Usage in signal webhook
-# Inside your /signal-webhook handler, update like this:
-if ict_mode_enabled and not matches_ict_criteria(data):
-    return "❌ Rejected by ICT Filter"
-
-# Example JSON signal:
-"""
-{
-  "symbol": "EURUSD",
-  "direction": "BUY",
-  "timeframe": "5min",
-  "market": "forex"
-}
-"""
-
-# ✅ Now only ICT-compliant trades will be forwarded when ict_mode_enabled = True
-from datetime import datetime, date
-from apscheduler.schedulers.background import BackgroundScheduler
-import pytz
-
-# ✅ Set timezone
-TIMEZONE = pytz.timezone("Africa/Nairobi")  # Ku beddel hadii timezone kale tahay
-
-# ✅ Signal tracking
-signals_today = []
-
-def mark_signal_received(symbol):
-    today_str = date.today().isoformat()
-    signals_today.append((symbol, today_str))
-
-def has_signal_today():
-    today_str = date.today().isoformat()
-    return any(day == today_str for _, day in signals_today)
-
-# ✅ Signal webhook update (mark signal received)
-# Inside /signal-webhook:
-mark_signal_received(symbol)  # Add this when signal is processed
-
-# ✅ Reminder function
-def daily_signal_check():
-    if not has_signal_today():
-        app.bot.send_message(chat_id=os.getenv("CHAT_ID"), text="⚠️ No signals were sent today. Please review system.")
-
-# ✅ Scheduler
-scheduler = BackgroundScheduler(timezone=TIMEZONE)
-scheduler.add_job(daily_signal_check, trigger="cron", hour=23, minute=59)
-scheduler.start()
+    if not wallet:
+        await update.message.reply_text("❌ Wallet weli lama keydin. Isticmaal /wallet si aad u geliso.")
+    else:
+        await update.message.reply_text(f"👛 Wallet: {wallet['address']} ({wallet['chain']})")
+import json
+import os
 from telegram.ext import CommandHandler
+from telegram import Update
+from telegram.ext import ContextTypes
+
+WALLET_FILE = "user_wallets.json"
+
+# ✅ Load wallets from file
+def load_wallets():
+    if os.path.exists(WALLET_FILE):
+        with open(WALLET_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+# ✅ Save wallets to file
+def save_wallets(data):
+    with open(WALLET_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+# ✅ Load existing wallets at startup
+user_wallets = load_wallets()
+
+# ✅ /wallet ETH 0x123...
+async def set_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    args = context.args
+
+    if len(args) != 2:
+        await update.message.reply_text("💡 Isticmaal sidaan: /wallet ETH 0xYourWallet")
+        return
+
+    chain, address = args
+    if chain.upper() not in ["ETH", "SOL"]:
+        await update.message.reply_text("❌ Fadlan dooro ETH ama SOL oo kaliya.")
+        return
+
+    user_wallets[user_id] = {"chain": chain.upper(), "address": address}
+    save_wallets(user_wallets)
+
+    await update.message.reply_text(f"✅ Wallet-kaaga {chain.upper()} waa la keydiyay: {address}")
+
+# ✅ /mywallet
+async def view_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    wallet = user_wallets.get(user_id)
+
+    if not wallet:
+        await update.message.reply_text("❌ Wallet weli lama keydin. Isticmaal /wallet si aad u geliso.")
+    else:
+        await update.message.reply_text(f"👛 Wallet: {wallet['address']} ({wallet['chain']})")
+# ✅ Cutubka 30 – ETH + SOL Wallet Auto Withdraw Feature (web3 + solana)
+
+from telegram.ext import CommandHandler
+from telegram import Update
+from telegram.ext import ContextTypes
+import os
+from web3 import Web3
+
+from solana.rpc.api import Client
+from solana.transaction import Transaction
+from solana.keypair import Keypair
+from solana.system_program import TransferParams, transfer
+from base58 import b58decode
+from decimal import Decimal
+
+# ✅ ENV SETUP
+INFURA_URL = os.getenv("INFURA_URL")
+PRIVATE_KEY_ETH = os.getenv("PRIVATE_KEY_ETH")  # hex string
+BOT_WALLET_ETH = os.getenv("WALLET_ADDRESS_ETH")
+
+PRIVATE_KEY_SOL = os.getenv("PRIVATE_KEY_SOL")  # base58 string
+BOT_WALLET_SOL = os.getenv("WALLET_ADDRESS_SOL")
+
+# ✅ Connect to Ethereum
+w3 = Web3(Web3.HTTPProvider(INFURA_URL))
+
+# ✅ Connect to Solana
+solana_client = Client("https://api.mainnet-beta.solana.com")
+
+# ✅ Load saved user wallets
+from Cutubka29 import user_wallets
+
+
+# ✅ ETH Withdraw Function
+async def withdraw_eth(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    wallet = user_wallets.get(user_id)
+    if not wallet or wallet["chain"] != "ETH":
+        await update.message.reply_text("❌ ETH wallet lama helin. Isticmaal /wallet si aad u keydiso.")
+        return
+
+    if len(context.args) != 1:
+        await update.message.reply_text("💡 Isticmaal sidaan: /withdraw_eth 0.01")
+        return
+
+    try:
+        amount = float(context.args[0])
+        to_address = wallet["address"]
+
+        value = w3.to_wei(amount, 'ether')
+        nonce = w3.eth.get_transaction_count(BOT_WALLET_ETH)
+
+        tx = {
+            'nonce': nonce,
+            'to': to_address,
+            'value': value,
+            'gas': 21000,
+            'gasPrice': w3.to_wei('20', 'gwei'),
+        }
+
+        signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY_ETH)
+        tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+
+        await update.message.reply_text(f"✅ ETH ({amount}) waa la diray.\nTX Hash: {tx_hash.hex()}")
+    except Exception as e:
+        await update.message.reply_text(f"❌ ETH Error: {str(e)}")
+
+
+# ✅ SOL Withdraw Function
+async def withdraw_sol(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    wallet = user_wallets.get(user_id)
+    if not wallet or wallet["chain"] != "SOL":
+        await update.message.reply_text("❌ SOL wallet lama helin. Isticmaal /wallet si aad u keydiso.")
+        return
+
+    if len(context.args) != 1:
+        await update.message.reply_text("💡 Isticmaal sidaan: /withdraw_sol 0.01")
+        return
+
+    try:
+        amount = float(context.args[0])
+        to_address = wallet["address"]
+
+        sender = Keypair.from_secret_key(b58decode(PRIVATE_KEY_SOL))
+        lamports = int(amount * 1_000_000_000)  # 1 SOL = 1e9 lamports
+
+        tx = Transaction()
+        tx.add(transfer(TransferParams(from_pubkey=sender.public_key, to_pubkey=to_address, lamports=lamports)))
+
+        response = solana_client.send_transaction(tx, sender)
+        tx_sig = response['result']
+
+        await update.message.reply_text(f"✅ SOL ({amount}) waa la diray.\nTX Signature: {tx_sig}")
+    except Exception as e:
+        await update.message.reply_text(f"❌ SOL Error: {str(e)}")
+
+# ✅ Cutubka 31 – Solana Memecoin Auto Buyer (Jupiter + Phantom support)
+
+from telegram.ext import CommandHandler
+from telegram import Update
+from telegram.ext import ContextTypes
+import os
+from solana.rpc.api import Client
+from solana.keypair import Keypair
+from solana.transaction import Transaction
+from solana.system_program import TransferParams, transfer
+from base58 import b58decode
+import requests
+import json
+
+# ✅ Solana config
+SOLANA_RPC_URL = "https://api.mainnet-beta.solana.com"
+solana_client = Client(SOLANA_RPC_URL)
+
+# ✅ ENV vars
+PRIVATE_KEY_SOL = os.getenv("PRIVATE_KEY_SOL")
+BOT_WALLET_SOL = os.getenv("WALLET_ADDRESS_SOL")
+
+# ✅ Load user wallets
+from Cutubka29 import user_wallets
+
+# ✅ Auto Buy Memecoin using Jupiter Aggregator
+async def buy_memecoin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    wallet = user_wallets.get(user_id)
+
+    if not wallet or wallet["chain"] != "SOL":
+        await update.message.reply_text("❌ SOL wallet lama helin. Isticmaal /wallet si aad u keydiso.")
+        return
+
+    if len(context.args) != 2:
+        await update.message.reply_text("💡 Isticmaal sidaan: /buy SUI 0.1")
+        return
+
+    token_symbol = context.args[0].upper()
+    sol_amount = float(context.args[1])
+    buyer_address = wallet["address"]
+
+    try:
+        # 1. Hel Token Mint Address from your backend or static list
+        TOKEN_MINTS = {
+            "SUI": "EXAMPLE_SUI_MINT_ADDRESS",
+            "DOGWIFHAT": "EXAMPLE_DOGWIFHAT_MINT",
+        }
+
+        if token_symbol not in TOKEN_MINTS:
+            await update.message.reply_text("❌ Token-ka lama yaqaan. Fadlan dooro mid sax ah.")
+            return
+
+        token_mint = TOKEN_MINTS[token_symbol]
+
+        # 2. Jupiter API Call for Best Route
+        jupiter_url = f"https://quote-api.jup.ag/v6/swap"
+        payload = {
+            "inputMint": "So11111111111111111111111111111111111111112",
+            "outputMint": token_mint,
+            "amount": int(sol_amount * 1_000_000_000),
+            "slippageBps": 50,
+            "userPublicKey": buyer_address,
+        }
+
+        response = requests.post(jupiter_url, json=payload)
+        swap_data = response.json()
+        if "swapTransaction" not in swap_data:
+            await update.message.reply_text("❌ Swap failed. Route not found.")
+            return
+
+        # 3. Decode and Sign the Transaction
+        swap_tx = swap_data["swapTransaction"]
+        swap_bytes = b58decode(swap_tx)
+
+        keypair = Keypair.from_secret_key(b58decode(PRIVATE_KEY_SOL))
+        tx = Transaction.deserialize(swap_bytes)
+
+        tx.sign(keypair)
+        tx_sig = solana_client.send_transaction(tx, keypair)["result"]
+
+        await update.message.reply_text(f"✅ {token_symbol} coin bought successfully!\nTX: {tx_sig}")
+
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {str(e)}")
+# ✅ Cutubka 32 – Multi-Chain Memecoin Detector (Avalanche, Base, Sui)
+# Description: Bot-ku wuxuu si toos ah u baaraa fursadaha cusub ee kasoo baxa Avalanche, Base, Sui
+# Wuxuu dirayaa signal Telegram, address coinka, sababta breakout, iyo status Halal/Haram.
+
+import random
+import datetime
+from telegram import Update
+from telegram.ext import ContextTypes
+
+# Chains taageero leh
+chains_supported = ["Avalanche", "Base", "Sui"]
+
+# Function-ka baaraya memecoins cusub
+def scan_new_memecoins():
+    new_coins = []
+    for chain in chains_supported:
+        # Tusaale fake ah (API ama webhook ayaa lagu beddeli karaa mustaqbalka)
+        coin_name = f"{chain[:2]}Coin{random.randint(100,999)}"
+        halal = random.choice([True, False])
+        new_coins.append({
+            "symbol": coin_name,
+            "address": f"0x{random.randint(10**15, 10**16-1):x}",
+            "chain": chain,
+            "halal": halal,
+            "reason": "Trending + Spike in mentions"
+        })
+    return new_coins
+
+# Function signal u dira Telegram
+def send_memecoin_signals(bot, chat_id):
+    coins = scan_new_memecoins()
+    for coin in coins:
+        halal_status = "🟢 Halal" if coin["halal"] else "🔴 Haram"
+        message = f"""🚨 New {coin['chain']} Memecoin Detected!
+
+🪙 Name: {coin['symbol']}
+🏷 Address: `{coin['address']}`
+📊 Reason: {coin['reason']}
+📍 Status: {halal_status}"""
+        bot.send_message(chat_id=chat_id, text=message, parse_mode="Markdown")
+
+# Command Telegram ah si loo adeegsado gacanta
+async def scan_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    send_memecoin_signals(context.bot, update.effective_chat.id)
+# ✅ Cutubka 32 – Multi-Chain Memecoin Detector (Avalanche, Base, Sui)
+# Description: Bot-ku wuxuu si toos ah u baaraa fursadaha cusub ee kasoo baxa Avalanche, Base, Sui
+# Wuxuu dirayaa signal Telegram, address coinka, sababta breakout, iyo status Halal/Haram.
+
+import random
+import datetime
+from telegram import Update
+from telegram.ext import ContextTypes
+
+# Chains taageero leh
+chains_supported = ["Avalanche", "Base", "Sui"]
+
+# Function-ka baaraya memecoins cusub
+def scan_new_memecoins():
+    new_coins = []
+    for chain in chains_supported:
+        # Tusaale fake ah (API ama webhook ayaa lagu beddeli karaa mustaqbalka)
+        coin_name = f"{chain[:2]}Coin{random.randint(100,999)}"
+        halal = random.choice([True, False])
+        new_coins.append({
+            "symbol": coin_name,
+            "address": f"0x{random.randint(10**15, 10**16-1):x}",
+            "chain": chain,
+            "halal": halal,
+            "reason": "Trending + Spike in mentions"
+        })
+    return new_coins
+
+# Function signal u dira Telegram
+def send_memecoin_signals(bot, chat_id):
+    coins = scan_new_memecoins()
+    for coin in coins:
+        halal_status = "🟢 Halal" if coin["halal"] else "🔴 Haram"
+        message = f"""🚨 New {coin['chain']} Memecoin Detected!
+
+🪙 Name: {coin['symbol']}
+🏷 Address: `{coin['address']}`
+📊 Reason: {coin['reason']}
+📍 Status: {halal_status}"""
+        bot.send_message(chat_id=chat_id, text=message, parse_mode="Markdown")
+
+# Command Telegram ah si loo adeegsado gacanta
+async def scan_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    send_memecoin_signals(context.bot, update.effective_chat.id)
+# ✅ Cutubka 33 – Chart Image Generator for Coins (Auto Graph)
+# Tani waxay si toos ah u soo saartaa sawir chart ah (line graph) oo coin-ka
+# Volume, Price, ama data kale lagaga sameeyo matplotlib
+
+import matplotlib.pyplot as plt
+import random
+import io
+from telegram import InputFile
+
+def generate_sample_chart(symbol: str):
+    # Random sample data for demo
+    prices = [round(random.uniform(0.1, 1.5), 3) for _ in range(20)]
+    timestamps = list(range(1, 21))
+
+    plt.figure(figsize=(6, 4))
+    plt.plot(timestamps, prices, marker='o', linestyle='-', color='blue')
+    plt.title(f"{symbol.upper()} Trend Chart")
+    plt.xlabel("Time")
+    plt.ylabel("Price ($)")
+    plt.grid(True)
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    buf.seek(0)
+    plt.close()
+    return buf
+
+# Telegram function to send chart
+async def send_chart_image(update, context):
+    symbol = "DEMO"
+    chart_buf = generate_sample_chart(symbol)
+    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=InputFile(chart_buf, filename=f"{symbol}_chart.png"))
+# ✅ Cutubka 34 – Daily Profit Goal Tracker
+
 from datetime import datetime, timedelta
 import json
 import os
 
-GOAL_FILE = "goal.json"
+# File to store goal data
+GOAL_FILE = "profit_goal.json"
 
-# ✅ Set or update profit goal
-async def set_goal(update, context):
+# Default target
+DEFAULT_GOAL = {
+    "start_date": str(datetime.now().date()),
+    "end_date": str((datetime.now() + timedelta(days=10)).date()),
+    "target_profit": 650,
+    "current_profit": 0
+}
+
+# ✅ Save goal progress
+def save_goal(data):
+    with open(GOAL_FILE, "w") as f:
+        json.dump(data, f)
+
+# ✅ Load goal
+def load_goal():
+    if not os.path.exists(GOAL_FILE):
+        save_goal(DEFAULT_GOAL)
+    with open(GOAL_FILE, "r") as f:
+        return json.load(f)
+
+# ✅ Add profit manually
+async def add_daily_profit(update, context):
     try:
         amount = float(context.args[0])
-        days = int(context.args[1])
-        start_date = datetime.now().strftime("%Y-%m-%d")
-
-        goal_data = {
-            "target_profit": amount,
-            "target_days": days,
-            "start_date": start_date,
-            "daily_profits": []
-        }
-
-        with open(GOAL_FILE, "w") as f:
-            json.dump(goal_data, f)
-
-        await update.message.reply_text(f"✅ Goal set: ${amount} in {days} days starting from {start_date}")
-    except Exception as e:
-        await update.message.reply_text("❌ Usage: /setgoal 650 10")
-
-# ✅ Add daily profit
-async def add_profit(update, context):
-    try:
-        profit = float(context.args[0])
-        today = datetime.now().strftime("%Y-%m-%d")
-
-        if not os.path.exists(GOAL_FILE):
-            await update.message.reply_text("⚠️ No goal set. Use /setgoal first.")
-            return
-
-        with open(GOAL_FILE, "r") as f:
-            goal_data = json.load(f)
-
-        goal_data["daily_profits"].append({"date": today, "amount": profit})
-
-        with open(GOAL_FILE, "w") as f:
-            json.dump(goal_data, f)
-
-        await update.message.reply_text(f"✅ Profit added: ${profit} on {today}")
+        goal = load_goal()
+        goal["current_profit"] += amount
+        save_goal(goal)
+        await update.message.reply_text(f"✅ Profit +${amount} added. Current: ${goal['current_profit']}")
     except:
-        await update.message.reply_text("❌ Usage: /profit 130")
+        await update.message.reply_text("❌ Usage: /profit 50")
 
-# ✅ Check progress
-async def check_goal(update, context):
-    if not os.path.exists(GOAL_FILE):
-        await update.message.reply_text("⚠️ No goal set.")
-        return
+# ✅ Show goal status
+async def show_goal(update, context):
+    goal = load_goal()
+    status = f"""
+📊 Profit Goal Tracker (10 Days)
+Start: {goal['start_date']}
+End: {goal['end_date']}
 
-    with open(GOAL_FILE, "r") as f:
-        goal_data = json.load(f)
+🎯 Target: ${goal['target_profit']}
+📈 Current: ${goal['current_profit']}
 
-    total_profit = sum([p["amount"] for p in goal_data["daily_profits"]])
-    days_passed = (datetime.now() - datetime.strptime(goal_data["start_date"], "%Y-%m-%d")).days + 1
-    target_days = goal_data["target_days"]
-    target_profit = goal_data["target_profit"]
+✅ Remaining: ${goal['target_profit'] - goal['current_profit']}
+"""
+    await update.message.reply_text(status)
 
-    msg = (
-        f"🎯 **Goal Progress**\n"
-        f"Target: ${target_profit} in {target_days} days\n"
-        f"Elapsed: {days_passed} days\n"
-        f"Current Profit: ${total_profit}\n"
-        f"Remaining: ${round(target_profit - total_profit, 2)}"
-    )
-    await update.message.reply_text(msg)
+# ✅ Reset goal
+async def reset_goal(update, context):
+    save_goal(DEFAULT_GOAL)
+    await update.message.reply_text("🔄 Goal has been reset.")
+# ✅ Cutubka 35 – Auto Reminder if No Trades Taken
 
-# ✅ Register handlers
-app.add_handler(CommandHandler("setgoal", set_goal))
-app.add_handler(CommandHandler("profit", add_profit))
-app.add_handler(CommandHandler("goal", check_goal))
-# ✅ Cutubka 25 – Bot Final Test Mode Script
-
-from telegram.ext import CommandHandler, CallbackQueryHandler
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ContextTypes
-import os
-
-# ✅ /start command – activate all
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = (
-        "👋 Welcome to *Hussein7 TradeBot*!\n\n"
-        "✅ I am now online and monitoring markets.\n"
-        "📊 You can send signals, test commands, or trigger webhooks.\n\n"
-        "Try using:\n"
-        "/notify – test alert\n"
-        "/profits – view log\n"
-        "/halalonly – toggle halal coins\n"
-        "/autotrade – toggle auto trade\n"
-        "/withdraw_eth – send ETH\n"
-        "/report – get daily PDF\n"
-    )
-    await update.message.reply_text(msg, parse_mode="Markdown")
-
-# ✅ Callback handler for signal buttons
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    if query.data.startswith("CONFIRM"):
-        parts = query.data.split(":")
-        symbol = parts[1]
-        direction = parts[2]
-        await query.edit_message_text(f"✅ Trade confirmed for {symbol} – {direction}")
-    elif query.data == "IGNORE":
-        await query.edit_message_text("❌ Signal ignored.")
-
-# ✅ Notify test signal
-async def notify(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = "🚨 Test Signal\nPair: EURUSD\nTime: 5min\nDirection: BUY"
-
-    buttons = [[
-        InlineKeyboardButton("✅ Confirm", callback_data="CONFIRM:EURUSD:BUY"),
-        InlineKeyboardButton("❌ Ignore", callback_data="IGNORE")
-    ]]
-    markup = InlineKeyboardMarkup(buttons)
-    await update.message.reply_text(msg, reply_markup=markup)
-
-# ✅ Add command handlers to app
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("notify", notify))
-app.add_handler(CallbackQueryHandler(button_handler))
-
-# ✅ Reminder: Run everything at the end
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(run())  # Start webhook
-    flask_app.run(host="0.0.0.0", port=10000)
-# ✅ CUTUBKA 26 – Auto Report Export to Google Sheets
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-from apscheduler.schedulers.background import BackgroundScheduler
-from datetime import datetime
-import atexit
-
-# ✅ Jadwalka (report export @ 23:59 daily)
-scheduler = BackgroundScheduler(timezone="Africa/Nairobi")
-
-# ✅ Google Sheets Setup
-def log_profit_to_google(amount: float, market: str, date=None):
-    try:
-        if not date:
-            date = datetime.now().strftime("%Y-%m-%d")
-
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_name("google_credentials.json", scope)
-        client = gspread.authorize(creds)
-
-        sheet = client.open("Hussein7_Profit_Log").sheet1
-        sheet.append_row([date, market.upper(), f"${amount}"])
-        print("✅ Profit logged to Google Sheets")
-    except Exception as e:
-        print(f"Google Sheets Error: {e}")
-
-# ✅ Jadwalka: 23:59 habeen kasta
-@scheduler.scheduled_job("cron", hour=23, minute=59)
-def daily_report_scheduler():
-    # Tusaale xog been ah – waxaad u badali kartaa xogta dhabta ah ee PDF ka imaneyso
-    log_profit_to_google(amount=97.5, market="forex")
-
-# ✅ Bilow Scheduler
-scheduler.start()
-atexit.register(lambda: scheduler.shutdown())
-async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    log_profit_to_google(83.3, "crypto")
-    await update.message.reply_text("📊 Report has been sent to Google Sheets!")
-
-app.add_handler(CommandHandler("report", report))
-# ✅ CHART IMAGE GENERATOR (Cutubka 27)
-import matplotlib.pyplot as plt
-import io
-import datetime
-from PIL import Image
-from telegram import InputMediaPhoto
-
-# ⬇️ Mock chart data generator (real data comes from TradingView, Binance API, etc.)
-def generate_mock_chart(symbol, direction="BUY"):
-    now = datetime.datetime.now()
-    times = [now - datetime.timedelta(minutes=i*5) for i in range(20)][::-1]
-    prices = [1.1000 + (i * 0.0005 if direction == "BUY" else -i * 0.0005) for i in range(20)]
-
-    plt.figure(figsize=(8, 4))
-    plt.plot(times, prices, marker='o', color='green' if direction == "BUY" else 'red')
-    plt.title(f"{symbol} – {direction}")
-    plt.xlabel("Time")
-    plt.ylabel("Price")
-    plt.grid(True)
-    plt.xticks(rotation=45)
-    
-    # Save to memory
-    buf = io.BytesIO()
-    plt.tight_layout()
-    plt.savefig(buf, format='png')
-    buf.seek(0)
-    plt.close()
-
-    return buf
-
-# ⬇️ Send chart image with message (Telegram)
-async def send_trade_chart(symbol, direction, context, chat_id):
-    try:
-        chart_image = generate_mock_chart(symbol, direction)
-        await context.bot.send_photo(chat_id=chat_id, photo=chart_image, caption=f"📊 {symbol} – {direction} Chart")
-    except Exception as e:
-        print(f"Chart Error: {e}")
-# Markaad signal dirayso, kudar sawirka
-await send_trade_chart("EURUSD", "BUY", context, update.effective_chat.id)
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
+from telegram.ext import Application
+from apscheduler.schedulers.background import BackgroundScheduler
 
-# ✅ FAYLKA TAARIIKHDA
-HISTORY_FILE = "trade_history.json"
+# ✅ File to track trade activity
+TRADE_LOG_FILE = "trade_activity.json"
 
-# ✅ Helper: Load history
-def load_trade_history():
-    if not os.path.exists(HISTORY_FILE):
-        return []
-    with open(HISTORY_FILE, "r") as file:
-        return json.load(file)
+# ✅ Initialize file if missing
+def init_trade_log():
+    if not os.path.exists(TRADE_LOG_FILE):
+        with open(TRADE_LOG_FILE, "w") as f:
+            json.dump({}, f)
 
-# ✅ Helper: Save history
-def save_trade_history(history):
-    with open(HISTORY_FILE, "w") as file:
-        json.dump(history, file, indent=2)
+# ✅ Record trade activity for today
+def log_trade():
+    init_trade_log()
+    data = load_trade_log()
+    today = str(datetime.now().date())
+    data[today] = True
+    with open(TRADE_LOG_FILE, "w") as f:
+        json.dump(data, f)
 
-# ✅ Add new trade result
-def log_trade(symbol, direction, result, profit=0.0, market="forex"):
-    history = load_trade_history()
-    entry = {
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "symbol": symbol,
-        "direction": direction,
-        "result": result,  # "TP" or "SL"
-        "profit": profit,
-        "market": market
-    }
-    history.append(entry)
-    save_trade_history(history)
+# ✅ Load trade log
+def load_trade_log():
+    init_trade_log()
+    with open(TRADE_LOG_FILE, "r") as f:
+        return json.load(f)
 
-# ✅ Win Rate & Stats
-def get_trade_stats():
-    history = load_trade_history()
-    if not history:
-        return "❌ No trade history available."
+# ✅ Check daily reminder
+async def daily_trade_check(context):
+    data = load_trade_log()
+    today = str(datetime.now().date())
+    if today not in data:
+        await context.bot.send_message(
+            chat_id=os.getenv("CHAT_ID", "YOUR_CHAT_ID"),
+            text="⚠️ Ma jiro wax trade ah oo la qaaday maanta!"
+        )
 
-    total = len(history)
-    wins = sum(1 for trade in history if trade["result"].upper() == "TP")
-    losses = sum(1 for trade in history if trade["result"].upper() == "SL")
-    win_rate = round((wins / total) * 100, 2)
+# ✅ APScheduler setup
+scheduler = BackgroundScheduler()
+scheduler.add_job(daily_trade_check, "cron", hour=23, minute=59, args=[app])
+scheduler.start()
 
-    summary = f"""
-📊 Trade Performance Summary
------------------------------
-✅ Total Trades: {total}
-🏆 Wins (TP): {wins}
-❌ Losses (SL): {losses}
-📈 Win Rate: {win_rate}%
------------------------------
-"""
-    return summary.strip()
+# ✅ Optional: Call log_trade() inside your trade execution function
+# For example:
+# log_trade()  → marka signal la xaqiijiyo ama auto trade dhacdo
+# ✅ Cutubka 36 – Cron Job Signal Scanner (Avalanche, Sui, Base)
 
-# ✅ Command: /stats
-from telegram.ext import CommandHandler
-
-async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    summary = get_trade_stats()
-    await update.message.reply_text(summary)
-
-app.add_handler(CommandHandler("stats", stats_command))
-
-# ✅ Tusaale: Marka TP ama SL la xaqiijiyo
-# log_trade("EURUSD", "BUY", "TP", profit=70.5)
-# log_trade("BTCUSDT", "SELL", "SL", profit=-45.2)
-# ✅ Cutubka 28 – TradingView Webhook JSON Signal Handler (Forex/Crypto/Stocks)
-
-from flask import request
+import requests
+import os
+from apscheduler.schedulers.background import BackgroundScheduler
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-@flask_app.route('/tradingview-alert', methods=['POST'])
-def tradingview_alert():
+# ✅ Target chains
+CHAINS = ["Avalanche", "Sui", "Base"]
+
+# ✅ Dummy source for signals (replace with real endpoint or database)
+def fetch_signals(chain):
+    # Tusaale ahaan waxaad geli kartaa API call, webhook, ama Notion DB
+    dummy_signals = {
+        "Avalanche": [{"symbol": "AVAXMOON", "direction": "BUY"}],
+        "Sui": [{"symbol": "SUICAT", "direction": "SELL"}],
+        "Base": [{"symbol": "BASEINU", "direction": "BUY"}]
+    }
+    return dummy_signals.get(chain, [])
+
+# ✅ Send signal to Telegram
+def send_signal_to_telegram(signal, chain, app):
+    try:
+        symbol = signal["symbol"]
+        direction = signal["direction"]
+
+        message = f"🚀 *{chain} Chain Signal*\nCoin: `{symbol}`\nDirection: {direction}"
+        buttons = [[
+            InlineKeyboardButton("✅ Confirm", callback_data=f"CONFIRM:{symbol}:{direction}"),
+            InlineKeyboardButton("❌ Ignore", callback_data="IGNORE")
+        ]]
+        reply_markup = InlineKeyboardMarkup(buttons)
+
+        chat_id = os.getenv("CHAT_ID", "YOUR_CHAT_ID")
+        app.bot.send_message(chat_id=chat_id, text=message, reply_markup=reply_markup, parse_mode="Markdown")
+    except Exception as e:
+        print(f"❌ Signal Send Error: {str(e)}")
+
+# ✅ Cron job function
+def scan_signals():
+    print("🔍 Scanning memecoin signals...")
+    for chain in CHAINS:
+        signals = fetch_signals(chain)
+        for signal in signals:
+            send_signal_to_telegram(signal, chain, app)
+
+# ✅ Start scheduler
+scheduler = BackgroundScheduler()
+scheduler.add_job(scan_signals, "interval", minutes=15)  # every 15 minutes
+scheduler.start()
+# ✅ Memecoin Early Sniper Strategy Module
+# Detects newly launched coins on DEX (e.g., Solana, Base, SUI) and alerts user
+
+import time
+import os
+import asyncio
+import requests
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+from apscheduler.schedulers.background import BackgroundScheduler
+
+# Global halal filter flag
+halal_only_mode = True
+
+# Keywords to filter haram coins
+haram_keywords = ["casino", "gambling", "loan", "riba", "liquor", "alcohol"]
+
+# ✅ Halal Check
+def is_halal(name):
+    return not any(k in name.lower() for k in haram_keywords)
+
+# ✅ Get recent memecoins from Solana (replace URL with DEX API if needed)
+def get_recent_memecoins():
+    response = requests.get("https://api.dexscreener.com/latest/dex/pairs/solana")
+    coins = response.json().get("pairs", [])
+    new_coins = []
+
+    for coin in coins:
+        created = coin.get("pairCreatedAt", 0) / 1000
+        minutes_ago = (time.time() - created) / 60
+
+        if minutes_ago < 10:
+            name = coin.get("baseToken", {}).get("name", "Unknown")
+            volume = coin.get("volumeUsd", 0)
+            liquidity = coin.get("liquidity", {}).get("usd", 0)
+
+            if volume > 5000 and liquidity > 1000:
+                if not halal_only_mode or is_halal(name):
+                    new_coins.append({
+                        "name": name,
+                        "address": coin.get("baseToken", {}).get("address"),
+                        "volume": volume,
+                        "liquidity": liquidity,
+                        "dex": coin.get("dexId")
+                    })
+    return new_coins
+
+# ✅ Notify Telegram
+async def notify_memecoin_sniper(context: ContextTypes.DEFAULT_TYPE):
+    coins = get_recent_memecoins()
+    for coin in coins:
+        msg = f"🚀 *New Memecoin Detected*\n"
+        msg += f"Name: {coin['name']}\n"
+        msg += f"Liquidity: ${coin['liquidity']:,}\n"
+        msg += f"Volume: ${coin['volume']:,}\n"
+        msg += f"DEX: {coin['dex']}\n"
+        msg += f"[📈 View on Dexscreener](https://dexscreener.com/{coin['dex']}/{coin['address']})"
+
+        buttons = [[
+            InlineKeyboardButton("✅ Watch", callback_data=f"WATCH:{coin['address']}"),
+            InlineKeyboardButton("❌ Ignore", callback_data="IGNORE")
+        ]]
+        reply_markup = InlineKeyboardMarkup(buttons)
+
+        await context.bot.send_message(
+            chat_id=os.getenv("CHAT_ID"),
+            text=msg,
+            parse_mode="Markdown",
+            reply_markup=reply_markup
+        )
+
+# ✅ Cron job setup (every 5 min)
+def start_sniper_scheduler(context):
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(lambda: asyncio.run(notify_memecoin_sniper(context)), 'interval', minutes=5)
+    scheduler.start()
+# ✅ TradeGuard Risk Control System
+# Protects account with a max drawdown and auto reset daily
+
+from datetime import datetime, timedelta
+from decimal import Decimal
+import os
+import json
+
+# ✅ Configurable Risk Settings
+MAX_DAILY_LOSS = Decimal(os.getenv("DAILY_MAX_RISK", "250"))
+ACCOUNT_BALANCE = Decimal(os.getenv("ACCOUNT_BALANCE", "5000"))
+TRADE_LOG_PATH = "trade_log.json"
+DAILY_RESET_HOUR = 0  # 0 = Midnight
+
+# ✅ Check if trade is allowed
+def can_take_trade():
+    today = datetime.utcnow().date()
+    if not os.path.exists(TRADE_LOG_PATH):
+        return True
+
+    with open(TRADE_LOG_PATH, "r") as f:
+        data = json.load(f)
+
+    day_data = data.get(str(today), {"loss": 0})
+    current_loss = Decimal(day_data.get("loss", 0))
+    return current_loss < MAX_DAILY_LOSS
+
+# ✅ Record a loss or win (triggered after trade closes)
+def record_trade_result(pnl_amount):
+    today = str(datetime.utcnow().date())
+    pnl_amount = Decimal(pnl_amount)
+
+    if not os.path.exists(TRADE_LOG_PATH):
+        data = {}
+    else:
+        with open(TRADE_LOG_PATH, "r") as f:
+            data = json.load(f)
+
+    if today not in data:
+        data[today] = {"loss": 0, "profit": 0}
+
+    if pnl_amount < 0:
+        data[today]["loss"] += abs(pnl_amount)
+    else:
+        data[today]["profit"] += pnl_amount
+
+    with open(TRADE_LOG_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+
+# ✅ Reset daily at midnight (UTC)
+def reset_daily_trade_limit():
+    if os.path.exists(TRADE_LOG_PATH):
+        with open(TRADE_LOG_PATH, "w") as f:
+            json.dump({}, f)
+
+# ✅ Example usage
+if can_take_trade():
+    print("✅ Trade allowed. Risk is within limits.")
+else:
+    print("❌ Daily loss limit reached. No more trades allowed today.")
+
+# Cron: Add to scheduler to reset daily at 00:00 UTC
+from apscheduler.schedulers.background import BackgroundScheduler
+
+def start_risk_guard_cron():
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(reset_daily_trade_limit, 'cron', hour=DAILY_RESET_HOUR)
+    scheduler.start()
+# ✅ ICT Trade Filter – Only allow signals matching Inner Circle Trader (ICT) style
+
+# Sample ICT keyword filters (you can expand this list)
+ict_keywords = ["FVG", "liquidity grab", "OB", "breaker", "Judas swing", "PD array"]
+
+# ✅ Toggle ICT filtering (optional command-based toggle)
+ict_filter_enabled = True
+
+def matches_ict_style(description: str) -> bool:
+    """Check if the signal description or strategy matches ICT terms"""
+    return any(keyword.lower() in description.lower() for keyword in ict_keywords)
+
+# ✅ Modify your existing webhook signal handler
+@flask_app.route('/signal-webhook', methods=['POST'])
+def signal_webhook():
     try:
         data = request.get_json()
 
@@ -1192,18 +1712,19 @@ def tradingview_alert():
         direction = data.get("direction", "BUY")
         timeframe = data.get("timeframe", "5min")
         market = data.get("market", "forex")
+        description = data.get("description", "")
 
-        # Optional fields
-        sl = data.get("sl", "N/A")
-        tp = data.get("tp", "N/A")
-        reason = data.get("reason", "No reason provided.")
+        # ✅ Only apply ICT filter to Forex signals
+        if ict_filter_enabled and market == "forex":
+            if not matches_ict_style(description):
+                return "⚠️ Signal ignored: not ICT style."
 
-        message = f"""🚨 <b>{market.upper()} Trade Signal</b>
-📈 Symbol: <code>{symbol}</code>
-🕒 Timeframe: <code>{timeframe}</code>
-📍 Direction: <b>{direction}</b>
-🎯 TP: <code>{tp}</code> | 🛑 SL: <code>{sl}</code>
-💬 Reason: <i>{reason}</i>"""
+        message = f"🚨 New {market.upper()} Signal\nPair: {symbol}\nTime: {timeframe}\nDirection: {direction}"
+
+        # ✅ Optional: show ICT confirmation
+        if market == "forex":
+            ict_status = "🧠 ICT Signal ✅" if matches_ict_style(description) else "❌ Not ICT"
+            message += f"\n{ict_status}"
 
         buttons = [[
             InlineKeyboardButton("✅ Confirm", callback_data=f"CONFIRM:{symbol}:{direction}"),
@@ -1212,434 +1733,569 @@ def tradingview_alert():
         reply_markup = InlineKeyboardMarkup(buttons)
 
         chat_id = os.getenv("CHAT_ID", "YOUR_CHAT_ID")
-        app.bot.send_message(chat_id=chat_id, text=message, reply_markup=reply_markup, parse_mode='HTML')
+        app.bot.send_message(chat_id=chat_id, text=message, reply_markup=reply_markup)
 
-        return "✅ Alert received and sent to Telegram."
+        return "Signal Sent"
     except Exception as e:
-        print(f"Webhook Error: {e}")
-        return f"❌ Error: {str(e)}"
-# ✅ Cutubka 29 – Notion P&L Dashboard Sync
-
-import requests
-import datetime
+        return f"Webhook error: {str(e)}"
+from fpdf import FPDF
+from datetime import datetime
 import os
-
-NOTION_TOKEN = os.getenv("NOTION_TOKEN")
-NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
-
-# ✅ Function to log daily profit to Notion
-def log_profit_to_notion(date: str, profit: float):
-    url = "https://api.notion.com/v1/pages"
-    headers = {
-        "Authorization": f"Bearer {NOTION_TOKEN}",
-        "Content-Type": "application/json",
-        "Notion-Version": "2022-06-28"
-    }
-
-    payload = {
-        "parent": {"database_id": NOTION_DATABASE_ID},
-        "properties": {
-            "Date": {
-                "date": {"start": date}
-            },
-            "Profit": {
-                "number": profit
-            }
-        }
-    }
-
-    response = requests.post(url, headers=headers, json=payload)
-    if response.status_code == 200 or response.status_code == 201:
-        print("✅ Profit logged to Notion.")
-    else:
-        print(f"❌ Notion logging error: {response.text}")
-
-# ✅ Example command to trigger from bot (/profit_notion 120)
-from telegram.ext import CommandHandler
-
-async def profit_notion(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        amount = float(context.args[0])
-        date = datetime.date.today().isoformat()
-        log_profit_to_notion(date, amount)
-        await update.message.reply_text(f"✅ Profit ${amount} logged to Notion.")
-    except:
-        await update.message.reply_text("❌ Usage: /profit_notion 120")
-
-app.add_handler(CommandHandler("profit_notion", profit_notion))
-# ✅ Cutubka 30 – Voice Reminder if No Trade Taken
-
-import asyncio
-import datetime
-from gtts import gTTS
-import tempfile
-import os
-
-# Path to track daily trade activity
-TRADE_LOG_FILE = "daily_trade_log.txt"
-
-# ✅ Call this whenever a trade is confirmed
-def log_trade_today():
-    today = datetime.date.today().isoformat()
-    with open(TRADE_LOG_FILE, "a") as f:
-        f.write(f"{today}\n")
-
-# ✅ Check if a trade was taken today
-def trade_taken_today():
-    today = datetime.date.today().isoformat()
-    if not os.path.exists(TRADE_LOG_FILE):
-        return False
-    with open(TRADE_LOG_FILE, "r") as f:
-        lines = f.read().splitlines()
-    return today in lines
-
-# ✅ Send voice reminder if no trade was taken
-async def remind_if_no_trade(context):
-    chat_id = os.getenv("CHAT_ID", "YOUR_CHAT_ID")
-    if not trade_taken_today():
-        text = "Ma jiraan wax trade ah oo aad qaaday maanta. Fadlan dib u eeg suuqyada!"
-        tts = gTTS(text)
-        with tempfile.NamedTemporaryFile(delete=False) as tmp:
-            tts_path = tmp.name + ".mp3"
-            tts.save(tts_path)
-        with open(tts_path, "rb") as audio:
-            await context.bot.send_voice(chat_id=chat_id, voice=audio)
-        os.remove(tts_path)
-
-# ✅ Scheduler at 23:30 daily
-import schedule
-
-def setup_reminder_job(app_context):
-    def wrapper():
-        asyncio.run(remind_if_no_trade(app_context))
-    schedule.every().day.at("23:30").do(wrapper)
-
-# ✅ Add to your main loop to trigger schedule
-def schedule_loop():
-    while True:
-        schedule.run_pending()
-        time.sleep(30)
-# ✅ Cutubka 31 – Auto Trade Toggle + Execution Execution
-
-from telegram.ext import CommandHandler
-from telegram import Update
 from telegram.ext import ContextTypes
-import os
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-# Auto mode status
-auto_trade_enabled = False
+# ✅ PDF Report Generator
+def generate_daily_pdf_report(trades: list):
+    today = datetime.now().strftime("%Y-%m-%d")
+    filename = f"Trade_Report_{today}.pdf"
 
-# ✅ Toggle Command
-async def toggle_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global auto_trade_enabled
-    auto_trade_enabled = not auto_trade_enabled
-    status = "✅ AutoTrade ON" if auto_trade_enabled else "❌ AutoTrade OFF"
-    await update.message.reply_text(f"{status}")
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt=f"📊 Daily Trade Report – {today}", ln=True, align="C")
+    pdf.ln(10)
 
-# ✅ Command handler
-app.add_handler(CommandHandler("autotrade", toggle_autotrade))
+    for idx, trade in enumerate(trades, 1):
+        pdf.cell(200, 10, txt=f"{idx}. {trade}", ln=True)
 
-# ✅ Execution Function
-def execute_trade(symbol: str, direction: str, market: str):
-    if not auto_trade_enabled:
-        print("AutoTrade is OFF. Skipping execution.")
+    os.makedirs("reports", exist_ok=True)
+    filepath = os.path.join("reports", filename)
+    pdf.output(filepath)
+    return filepath
+
+# ✅ Telegram Send Function
+async def send_daily_report(context: ContextTypes.DEFAULT_TYPE):
+    trades = context.bot_data.get("daily_trades", [])
+    if not trades:
         return
 
-    print(f"🟢 Executing trade → {market.upper()} | {symbol} | {direction}")
-    # Placeholder: Add your API/broker call here (e.g., MetaTrader, TradingView broker, Exchange)
+    filepath = generate_daily_pdf_report(trades)
+    chat_id = os.getenv("CHAT_ID")
+    await context.bot.send_document(chat_id=chat_id, document=open(filepath, "rb"))
 
-    # Log or notify
-    app.bot.send_message(
-        chat_id=os.getenv("CHAT_ID", "YOUR_CHAT_ID"),
-        text=f"✅ AutoTrade Executed\nMarket: {market}\nPair: {symbol}\nDirection: {direction}"
-    )
-import json
+# ✅ Scheduler (23:59 daily)
+scheduler = AsyncIOScheduler()
+scheduler.add_job(send_daily_report, "cron", hour=23, minute=59, args=[None])
+scheduler.start()
+from datetime import datetime
 import os
-from telegram import Update
-from telegram.ext import CallbackContext
+import json
 
-CONFIRM_LOG_FILE = "confirmed_signals.json"
+# ✅ Folder to save results
+os.makedirs("trade_logs", exist_ok=True)
 
-def log_signal(action, symbol, direction):
-    signal = {
-        "action": action,
+# ✅ Save trade result to JSON log file
+def save_trade_result(symbol: str, direction: str, result: str, pnl: float):
+    today = datetime.now().strftime("%Y-%m-%d")
+    filename = f"trade_logs/{today}.json"
+
+    # Load previous data if exists
+    if os.path.exists(filename):
+        with open(filename, "r") as f:
+            data = json.load(f)
+    else:
+        data = []
+
+    entry = {
+        "time": datetime.now().strftime("%H:%M:%S"),
         "symbol": symbol,
         "direction": direction,
-        "timestamp": str(datetime.datetime.now())
+        "result": result,
+        "pnl": pnl
     }
 
-    if not os.path.exists(CONFIRM_LOG_FILE):
-        with open(CONFIRM_LOG_FILE, "w") as f:
-            json.dump([], f)
+    data.append(entry)
 
-    with open(CONFIRM_LOG_FILE, "r+") as f:
-        logs = json.load(f)
-        logs.append(signal)
-        f.seek(0)
-        json.dump(logs, f, indent=2)
+    with open(filename, "w") as f:
+        json.dump(data, f, indent=2)
 
-async def confirm_callback(update: Update, context: CallbackContext):
-    query = update.callback_query
-    await query.answer()
+# ✅ Example usage when a trade closes:
+# result = "TP Hit" or "SL Hit"
+# pnl = Profit or loss (e.g. 75 or -250)
+save_trade_result("EURUSD", "BUY", "TP Hit", 75.0)
+from telegram import Update
+from telegram.ext import CommandHandler, ContextTypes
+import json
+import os
+from datetime import datetime
 
-    try:
-        _, symbol, direction = query.data.split(":")
-        log_signal("CONFIRMED", symbol, direction)
-        await query.edit_message_text(f"✅ Signal Confirmed: {symbol} - {direction}")
-    except Exception as e:
-        await query.edit_message_text("⚠️ Invalid confirmation data")
+async def view_profits(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    today = datetime.now().strftime("%Y-%m-%d")
+    filename = f"trade_logs/{today}.json"
 
-async def ignore_callback(update: Update, context: CallbackContext):
-    query = update.callback_query
-    await query.answer()
+    if not os.path.exists(filename):
+        await update.message.reply_text("Ma jiro wax trade log ah maanta.")
+        return
 
-    try:
-        log_signal("IGNORED", "N/A", "N/A")
-        await query.edit_message_text("❌ Signal Ignored.")
-    except Exception as e:
-        await query.edit_message_text("⚠️ Failed to ignore signal")
-from confirm_ignore_handler import confirm_callback, ignore_callback
-from telegram.ext import CallbackQueryHandler
+    with open(filename, "r") as f:
+        trades = json.load(f)
 
-app.add_handler(CallbackQueryHandler(confirm_callback, pattern="^CONFIRM:"))
-app.add_handler(CallbackQueryHandler(ignore_callback, pattern="^IGNORE$"))
-import yfinance as yf
-import matplotlib.pyplot as plt
-import pandas as pd
-import datetime
-import tempfile
+    if not trades:
+        await update.message.reply_text("Ma jiraan wax trades la diiwaan geliyay.")
+        return
 
-def generate_chart(symbol, interval="1d", days_back=5):
-    try:
-        # Download historical data
-        end_date = datetime.datetime.now()
-        start_date = end_date - datetime.timedelta(days=days_back)
-        df = yf.download(symbol, start=start_date, end=end_date, interval=interval)
+    total_pnl = sum([trade["pnl"] for trade in trades])
+    message = f"📈 *Today's Trade Summary* ({today})\n\n"
 
-        if df.empty:
-            return None
+    for trade in trades:
+        message += f"🕒 {trade['time']} | {trade['symbol']} | {trade['direction']} | {trade['result']} | P&L: {trade['pnl']}\n"
 
-        fig, ax = plt.subplots()
-        df["Close"].plot(ax=ax, title=f"{symbol.upper()} Chart ({interval})")
-        ax.set_ylabel("Price")
-        ax.grid(True)
+    message += f"\n💰 *Total P&L:* {total_pnl}"
 
-        # Save image
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmpfile:
-            image_path = tmpfile.name
-            plt.savefig(image_path)
-            plt.close(fig)
-            return image_path
+    await update.message.reply_text(message, parse_mode="Markdown")
+from fpdf import FPDF
+from datetime import datetime
+import os
+import json
 
-    except Exception as e:
-        print(f"Chart generation failed: {e}")
+# ✅ Create PDF summary of today's trades
+def generate_daily_pdf():
+    today = datetime.now().strftime("%Y-%m-%d")
+    filename = f"trade_logs/{today}.json"
+    pdf_filename = f"pdf_reports/{today}_report.pdf"
+
+    if not os.path.exists(filename):
         return None
-from chart_generator import generate_chart
 
-# Inside your webhook or notify logic
-symbol = "AAPL"  # or BTC-USD, ETH-USD
-interval = "5m" if market == "crypto" else "1d"
-image_path = generate_chart(symbol, interval=interval)
+    with open(filename, "r") as f:
+        trades = json.load(f)
 
-if image_path:
-    context.bot.send_photo(chat_id=chat_id, photo=open(image_path, "rb"))
-import matplotlib.pyplot as plt
-import pandas as pd
+    if not trades:
+        return None
+
+    os.makedirs("pdf_reports", exist_ok=True)
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+
+    pdf.cell(200, 10, txt=f"📄 Trade Summary – {today}", ln=True, align="C")
+    pdf.ln(10)
+
+    total_pnl = 0
+
+    for trade in trades:
+        line = f"{trade['time']} | {trade['symbol']} | {trade['direction']} | {trade['result']} | P&L: {trade['pnl']}"
+        pdf.cell(200, 10, txt=line, ln=True)
+        total_pnl += trade["pnl"]
+
+    pdf.ln(10)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(200, 10, txt=f"💰 Total P&L: {total_pnl}", ln=True)
+
+    pdf.output(pdf_filename)
+    return pdf_filename
+# ✅ Cutubka 45 – PDF Daily Report via /report Command
+
+from telegram.ext import CommandHandler
+from fpdf import FPDF
 import datetime
-import tempfile
-
-# Sample function for generating chart image (sample data used here)
-def generate_chart_image(symbol="BTCUSD", data=None):
-    if data is None:
-        # Sample data: 10 candles
-        now = datetime.datetime.now()
-        data = pd.DataFrame({
-            "time": [now - datetime.timedelta(minutes=5*i) for i in range(10)][::-1],
-            "open": [100 + i for i in range(10)],
-            "high": [102 + i for i in range(10)],
-            "low": [99 + i for i in range(10)],
-            "close": [101 + i for i in range(10)],
-            "volume": [1000 + i*10 for i in range(10)]
-        })
-
-    fig, ax = plt.subplots(figsize=(8, 4))
-
-    for idx, row in data.iterrows():
-        color = 'green' if row['close'] >= row['open'] else 'red'
-        ax.plot([row['time'], row['time']], [row['low'], row['high']], color=color)
-        ax.plot([row['time'], row['time']], [row['open'], row['close']], color=color, linewidth=5)
-
-    ax.set_title(f"{symbol} Chart")
-    ax.set_ylabel("Price")
-    ax.set_xticks([])
-
-    # Save to temporary file
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-    plt.tight_layout()
-    plt.savefig(tmp.name)
-    plt.close(fig)
-
-    return tmp.name
-from chart_generator import generate_chart_image
-
-async def send_chart(update, context):
-    symbol = "BTCUSD"  # You can customize this based on signal
-    chart_path = generate_chart_image(symbol)
-    with open(chart_path, "rb") as img:
-        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=img)
-from telegram.ext import CommandHandler
-app.add_handler(CommandHandler("chart", send_chart))
-img_path = generate_chart_image("ETHUSD", eth_data)
-bot.send_photo(chat_id=chat_id, photo=open(img_path, "rb"))
 import os
-import json
-from datetime import datetime
-from telegram.ext import CommandHandler
 
-# -------------------- ENV --------------------
-DAILY_PROFIT_TARGET = float(os.getenv("DAILY_PROFIT_TARGET", "65"))
-PROFIT_LOG = "profit_log.json"
+# ✅ Trade mock data (should come from your database or actual log)
+daily_trades = [
+    {"symbol": "EURUSD", "result": "WIN", "pnl": "+$120"},
+    {"symbol": "BTCUSDT", "result": "LOSS", "pnl": "-$50"},
+    {"symbol": "AAPL", "result": "WIN", "pnl": "+$95"},
+]
 
-# -------------------- Helper Functions --------------------
+# ✅ PDF Generator
+def generate_daily_report(trades):
+    today = datetime.date.today().strftime("%Y-%m-%d")
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=14)
+    pdf.cell(200, 10, txt=f"📊 Daily Trade Report - {today}", ln=True, align="C")
 
-# Save today's profit
-def save_profit(amount):
+    for trade in trades:
+        symbol = trade.get("symbol", "N/A")
+        result = trade.get("result", "N/A")
+        pnl = trade.get("pnl", "N/A")
+        pdf.cell(200, 10, txt=f"{symbol} | Result: {result} | P&L: {pnl}", ln=True)
+
+    file_path = f"/mnt/data/trade_report_{today}.pdf"
+    pdf.output(file_path)
+    return file_path
+
+# ✅ /report Command Handler
+async def report_command(update, context):
     try:
-        today = datetime.now().strftime("%Y-%m-%d")
-        if not os.path.exists(PROFIT_LOG):
-            with open(PROFIT_LOG, "w") as f:
-                json.dump({}, f)
-
-        with open(PROFIT_LOG, "r") as f:
-            data = json.load(f)
-
-        data[today] = data.get(today, 0) + amount
-
-        with open(PROFIT_LOG, "w") as f:
-            json.dump(data, f)
-
-        return data[today]
+        file_path = generate_daily_report(daily_trades)
+        await update.message.reply_document(document=open(file_path, "rb"))
     except Exception as e:
-        print("Profit Save Error:", e)
-        return 0
+        await update.message.reply_text(f"❌ Error generating report: {e}")
+# ✅ Cutubka 46 – Scheduler for Daily PDF Report at 23:59
 
-# Get today's profit
-def get_today_profit():
-    today = datetime.now().strftime("%Y-%m-%d")
-    if os.path.exists(PROFIT_LOG):
-        with open(PROFIT_LOG, "r") as f:
-            data = json.load(f)
-        return data.get(today, 0)
-    return 0
+from apscheduler.schedulers.background import BackgroundScheduler
+from telegram import InputFile
+import datetime
 
-# -------------------- Telegram Handlers --------------------
+# Same PDF generator function from Cutubka 45
+def generate_daily_report(trades):
+    today = datetime.date.today().strftime("%Y-%m-%d")
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=14)
+    pdf.cell(200, 10, txt=f"📊 Daily Trade Report - {today}", ln=True, align="C")
 
-# /profit 25 → Add profit
-async def add_profit(update, context):
+    for trade in trades:
+        symbol = trade.get("symbol", "N/A")
+        result = trade.get("result", "N/A")
+        pnl = trade.get("pnl", "N/A")
+        pdf.cell(200, 10, txt=f"{symbol} | Result: {result} | P&L: {pnl}", ln=True)
+
+    file_path = f"/mnt/data/trade_report_{today}.pdf"
+    pdf.output(file_path)
+    return file_path
+
+# ✅ Scheduled job
+def send_daily_report_job():
     try:
-        amount = float(context.args[0])
-        today_total = save_profit(amount)
-        await update.message.reply_text(f"✅ ${amount} added. Today's total: ${today_total}")
-    except:
-        await update.message.reply_text("❌ Usage: /profit 25.50")
+        file_path = generate_daily_report(daily_trades)
+        app.bot.send_document(chat_id=os.getenv("CHAT_ID"), document=InputFile(file_path))
+        print("✅ Daily report sent automatically.")
+    except Exception as e:
+        print(f"❌ Error sending daily report: {e}")
 
-# /goal → View today's status
-async def profit_goal(update, context):
-    today_profit = get_today_profit()
-    remaining = DAILY_PROFIT_TARGET - today_profit
-    status = "✅ Goal Reached!" if remaining <= 0 else f"💸 You need ${remaining:.2f} more"
+# ✅ Scheduler setup
+scheduler = BackgroundScheduler()
+scheduler.add_job(send_daily_report_job, trigger='cron', hour=23, minute=59)
+scheduler.start()
+# ✅ Cutubka 47 – Market Filter for Daily Report Summary
 
-    await update.message.reply_text(
-        f"📊 Daily Goal: ${DAILY_PROFIT_TARGET}\n"
-        f"💰 Today's Profit: ${today_profit}\n"
-        f"{status}"
-    )
-
-# -------------------- Add Handlers --------------------
-
-app.add_handler(CommandHandler("profit", add_profit))
-app.add_handler(CommandHandler("goal", profit_goal))
-import os
-import json
-import schedule
-import time
+from telegram import Update
+from telegram.ext import CommandHandler
 from datetime import datetime
-from telegram import Bot
 
-# ✅ Setup bot
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
-bot = Bot(token=TELEGRAM_TOKEN)
+# Sample in-memory trade log (can be loaded from file/db in real usage)
+trade_log = [
+    {"market": "forex", "symbol": "EURUSD", "result": "WIN", "pnl": "+35"},
+    {"market": "crypto", "symbol": "SOL", "result": "LOSS", "pnl": "-20"},
+    {"market": "forex", "symbol": "GBPUSD", "result": "WIN", "pnl": "+50"},
+    {"market": "stocks", "symbol": "TSLA", "result": "LOSS", "pnl": "-15"},
+]
 
-PROFIT_LOG = "profit_log.json"
-
-def no_trade_reminder():
-    today = datetime.now().strftime("%Y-%m-%d")
+async def filter_trades_by_market(update: Update, context):
     try:
-        if not os.path.exists(PROFIT_LOG):
-            bot.send_message(chat_id=CHAT_ID, text="⚠️ No trades were logged today.")
+        if len(context.args) != 1:
+            await update.message.reply_text("❗ Isticmaal sidaan: /trades forex")
             return
 
-        with open(PROFIT_LOG, "r") as f:
-            data = json.load(f)
+        market = context.args[0].lower()
+        filtered = [t for t in trade_log if t["market"].lower() == market]
 
-        if today not in data or data[today] == 0:
-            bot.send_message(chat_id=CHAT_ID, text="⚠️ No trades were taken today. Please review your strategy.")
+        if not filtered:
+            await update.message.reply_text(f"❌ Ma jiro trade la helay for market: {market}")
+            return
+
+        msg = f"📋 Trades for market: {market.upper()}\n"
+        for t in filtered:
+            msg += f"{t['symbol']} - {t['result']} ({t['pnl']})\n"
+        await update.message.reply_text(msg)
     except Exception as e:
-        print("Reminder Error:", e)
+        await update.message.reply_text(f"Error filtering trades: {str(e)}")
 
-# ✅ Jadwal 23:59 every night
-schedule.every().day.at("23:59").do(no_trade_reminder)
+# ✅ Add this command handler
+# ✅ Cutubka 48 – Push App Custom JSON Tester Tool
 
-# ✅ Keep running in background
-def run_scheduler():
-    while True:
-        schedule.run_pending()
-        time.sleep(30)
+from flask import Flask, request, jsonify
 
-# ✅ If running inside main.py:
-import threading
-threading.Thread(target=run_scheduler).start()
-# Run this once at startup (main.py or deploy.py)
-import asyncio
+push_tester = Flask(__name__)
 
-async def run():
-    await app.bot.set_webhook(WEBHOOK_URL)
-
-if __name__ == "__main__":
-    asyncio.run(run())
-    flask_app.run(host="0.0.0.0", port=10000)
-from apscheduler.schedulers.background import BackgroundScheduler
-from report_generator import generate_pdf_report
-
-scheduler = BackgroundScheduler()
-
-@scheduler.scheduled_job("cron", hour=23, minute=59)
-def auto_send_report():
-    print("⏰ Generating daily report...")
-    generate_pdf_report()
-
-scheduler.start()
-{
-  "title": "📈 Signal Alert",
-  "message": "GOLD Buy (5min TF)",
-  "sound": "trade-alert.mp3",
-  "link": "https://t.me/HUSSEINGAIA"
-}
-
-# ✅ Run Flask thread + bot
-def run_flask():
-    flask_app.run(host='0.0.0.0', port=10000)
-
-threading.Thread(target=run_flask).start()
-app.run_polling()
-
-# ✅ Run bot
-app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-app.add_handler(CommandHandler("profit", add_profit))
-app.add_handler(CommandHandler("profits", view_profits))
-app.add_handler(CommandHandler("withdraw_eth", withdraw_eth))
-app.add_handler(CommandHandler("autotrade", toggle_auto_trade))
+@push_tester.route('/push-test', methods=["POST"])
+def push_test():
+    try:
+        data = request.get_json(force=True)
+        print("✅ Received Push Test JSON:")
+        print(data)
+        return jsonify({"status": "✅ JSON Received", "data": data}), 200
+    except Exception as e:
+        return jsonify({"status": "❌ Error", "error": str(e)}), 400
 
 if __name__ == '__main__':
-    app.run_polling()
+    # You can change the port number if needed
+    push_tester.run(port=5000)
+# ✅ Cutubka 49 – Multi-user Wallet Encryption & Security
+
+import json
+import os
+from cryptography.fernet import Fernet
+
+# 🔐 Key generation (same once, then store safely!)
+ENCRYPTION_KEY_PATH = "wallet_encryption.key"
+WALLETS_FILE = "secure_wallets.json"
+
+# Create key if not exists
+if not os.path.exists(ENCRYPTION_KEY_PATH):
+    with open(ENCRYPTION_KEY_PATH, "wb") as f:
+        f.write(Fernet.generate_key())
+
+# Load encryption key
+with open(ENCRYPTION_KEY_PATH, "rb") as f:
+    ENCRYPTION_KEY = f.read()
+
+fernet = Fernet(ENCRYPTION_KEY)
+
+# ✅ Save wallet securely for a user
+def save_wallet(user_id: str, wallet_data: dict):
+    encrypted_data = fernet.encrypt(json.dumps(wallet_data).encode())
+    if os.path.exists(WALLETS_FILE):
+        with open(WALLETS_FILE, "r") as f:
+            db = json.load(f)
+    else:
+        db = {}
+    db[user_id] = encrypted_data.decode()
+    with open(WALLETS_FILE, "w") as f:
+        json.dump(db, f)
+    print(f"✅ Wallet saved for user: {user_id}")
+
+# ✅ Load wallet securely
+def load_wallet(user_id: str) -> dict:
+    if not os.path.exists(WALLETS_FILE):
+        return {}
+    with open(WALLETS_FILE, "r") as f:
+        db = json.load(f)
+    encrypted_data = db.get(user_id)
+    if not encrypted_data:
+        return {}
+    decrypted = fernet.decrypt(encrypted_data.encode())
+    return json.loads(decrypted)
+
+# ✅ Tusaale isticmaal
+if __name__ == "__main__":
+    user_id = "user_742465040"  # Replace with Telegram user ID
+    wallet_info = {
+        "eth": "0x123abc...eth",
+        "sol": "solanaWalletExample...123",
+        "base": "baseAddressHere...",
+    }
+
+    save_wallet(user_id, wallet_info)
+# ✅ Cutubka 49 – Multi-user Wallet Encryption & Security
+
+import json
+import os
+from cryptography.fernet import Fernet
+
+# 🔐 Key generation (same once, then store safely!)
+ENCRYPTION_KEY_PATH = "wallet_encryption.key"
+WALLETS_FILE = "secure_wallets.json"
+
+# Create key if not exists
+if not os.path.exists(ENCRYPTION_KEY_PATH):
+    with open(ENCRYPTION_KEY_PATH, "wb") as f:
+        f.write(Fernet.generate_key())
+
+# Load encryption key
+with open(ENCRYPTION_KEY_PATH, "rb") as f:
+    ENCRYPTION_KEY = f.read()
+
+fernet = Fernet(ENCRYPTION_KEY)
+
+# ✅ Save wallet securely for a user
+def save_wallet(user_id: str, wallet_data: dict):
+    encrypted_data = fernet.encrypt(json.dumps(wallet_data).encode())
+    if os.path.exists(WALLETS_FILE):
+        with open(WALLETS_FILE, "r") as f:
+            db = json.load(f)
+    else:
+        db = {}
+    db[user_id] = encrypted_data.decode()
+    with open(WALLETS_FILE, "w") as f:
+        json.dump(db, f)
+    print(f"✅ Wallet saved for user: {user_id}")
+
+# ✅ Load wallet securely
+def load_wallet(user_id: str) -> dict:
+    if not os.path.exists(WALLETS_FILE):
+        return {}
+    with open(WALLETS_FILE, "r") as f:
+        db = json.load(f)
+    encrypted_data = db.get(user_id)
+    if not encrypted_data:
+        return {}
+    decrypted = fernet.decrypt(encrypted_data.encode())
+    return json.loads(decrypted)
+
+# ✅ Tusaale isticmaal
+if __name__ == "__main__":
+    user_id = "user_742465040"  # Replace with Telegram user ID
+    wallet_info = {
+        "eth": "0x123abc...eth",
+        "sol": "solanaWalletExample...123",
+        "base": "baseAddressHere...",
+    }
+
+    save_wallet(user_id, wallet_info)
+# ✅ Cutubyada 50 ilaa 55 (Isku dhafan oo hal file ah)
+
+# ✅ Cutubka 50 – Signal Accuracy Logger
+from datetime import datetime
+import json
+
+def log_trade_result(symbol: str, result: str):
+    log_entry = {
+        "symbol": symbol,
+        "result": result,  # "win" or "loss"
+        "timestamp": datetime.now().isoformat()
+    }
+    with open("trade_accuracy_log.json", "a") as f:
+        f.write(json.dumps(log_entry) + "\n")
+
+# Isticmaal marka signal kasta uu dhamaado:
+# log_trade_result("EURUSD", "win")
+
+# ✅ Cutubka 51 – Auto Cleanup Old Logs
+import os
+from datetime import timedelta
+
+def cleanup_old_logs(file_path="trade_accuracy_log.json", days=30):
+    if not os.path.exists(file_path):
+        return
+    new_logs = []
+    cutoff = datetime.now() - timedelta(days=days)
+    with open(file_path, "r") as f:
+        for line in f:
+            try:
+                log = json.loads(line)
+                if datetime.fromisoformat(log["timestamp"]) > cutoff:
+                    new_logs.append(line)
+            except:
+                continue
+    with open(file_path, "w") as f:
+        f.writelines(new_logs)
+
+# ✅ Cutubka 52 – VPS Watchdog (auto restart if crash)
+import subprocess
+import time
+
+def run_with_watchdog(script_path="main.py"):
+    while True:
+        try:
+            subprocess.run(["python", script_path])
+        except Exception as e:
+            print("❌ Bot crashed, restarting...", e)
+        time.sleep(5)
+
+# ✅ Cutubka 53 – Chart OCR Reader (optional)
+import pytesseract
+from PIL import Image
+
+def extract_text_from_chart(image_path: str) -> str:
+    image = Image.open(image_path)
+    text = pytesseract.image_to_string(image)
+    return text
+
+# Usage:
+# print(extract_text_from_chart("chart.png"))
+
+# ✅ Cutubka 54 – Multi-language Support
+lang_messages = {
+    "en": {
+        "start": "Welcome!",
+        "halal_only": "Halal Only Mode is now ON"
+    },
+    "so": {
+        "start": "Ku soo dhawoow!",
+        "halal_only": "Xulashada Halal kaliya waa ON"
+    }
+}
+
+def get_msg(key: str, lang: str = "en") -> str:
+    return lang_messages.get(lang, {}).get(key, key)
+
+# Usage:
+# user_lang = "so"
+# bot.send_message(chat_id, get_msg("start", user_lang))
+
+# ✅ Cutubka 55 – Auto P&L Sync with Notion
+# This requires setting up Notion API access & token
+import requests
+
+def send_to_notion(profit: float, date: str):
+    notion_url = "https://api.notion.com/v1/pages"
+    headers = {
+        "Authorization": "Bearer YOUR_NOTION_API_TOKEN",
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "parent": {"database_id": "YOUR_DATABASE_ID"},
+        "properties": {
+            "Date": {"date": {"start": date}},
+            "Profit": {"number": profit}
+        }
+    }
+    response = requests.post(notion_url, headers=headers, json=data)
+    return response.status_code == 200
+    print("✅ Recovered Wallet:", load_wallet(user_id))
+    print("✅ Recovered Wallet:", load_wallet(user_id))
+app.add_handler(CommandHandler("trades", filter_trades_by_market))
+# ✅ Add handler
+app.add_handler(CommandHandler("report", report_command))
+# ✅ Register command
+app.add_handler(CommandHandler("profits", view_profits))
+# ✅ Handler for manual test
+from telegram.ext import CommandHandler
+async def remind_me(update, context):
+    await daily_trade_check(context)
+app.add_handler(CommandHandler("checktrades", remind_me))
+# ✅ Telegram command handlers
+from telegram.ext import CommandHandler
+app.add_handler(CommandHandler("profit", add_daily_profit))
+app.add_handler(CommandHandler("profits", show_goal))
+app.add_handler(CommandHandler("resetgoal", reset_goal))
+# Telegram command handler
+from telegram.ext import CommandHandler
+app.add_handler(CommandHandler("chartdemo", send_chart_image))
+# Ku dar handler
+app.add_handler(CommandHandler("scan_memecoins", scan_cmd))
+# Ku dar handler
+app.add_handler(CommandHandler("scan_memecoins", scan_cmd))
+
+# ✅ Ku dar command handler
+app.add_handler(CommandHandler("buy", buy_memecoin))
+# ✅ Ku dar command handler
+app.add_handler(CommandHandler("withdraw_eth", withdraw_eth))
+app.add_handler(CommandHandler("withdraw_sol", withdraw_sol)) 
+# ✅ Ku dar handlers-ka
+app.add_handler(CommandHandler("wallet", set_wallet))
+app.add_handler(CommandHandler("mywallet", view_wallet))
+# ✅ Ku dar handlers-ka
+app.add_handler(CommandHandler("wallet", set_wallet))
+app.add_handler(CommandHandler("mywallet", view_wallet))
+# ✅ Register Commands
+app.add_handler(CommandHandler("withdraw_eth", withdraw_eth))  # /withdraw_eth <wallet> <amount>
+app.add_handler(CommandHandler("eth_balance", eth_balance))    # /eth_balance
+# ✅ Ku dar command handlers:
+app.add_handler(CommandHandler("profit", log_profit))
+app.add_handler(CommandHandler("profits", view_profits))
+app.add_handler(CommandHandler("report", generate_report))
+# ✅ Ku dar handlers-ka
+app.add_handler(CommandHandler("goal", goal_status))
+app.add_handler(CommandHandler("addprofit", add_profit))
+# ✅ Register handlers
+app.add_handler(CommandHandler("goal", goal_status))
+app.add_handler(CommandHandler("addprofit", add_profit))
+
+# ✅ Add the ICT filter command handler
+app.add_handler(CommandHandler("ictfilter", toggle_ict_filter))
+# ✅ Add to handlers
+app.add_handler(CommandHandler("search", search_command))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search_query))
+# ✅ Register handlers
+app.add_handler(CommandHandler("togglemarkets", toggle_market_visibility))
+app.add_handler(CallbackQueryHandler(handle_toggle_market_callback, pattern="^TOGGLE_MARKET:"))
+# ✅ Register command
+app.add_handler(CommandHandler("halalonly", toggle_halal_only))
+app.add_handler(CommandHandler("halalonly", toggle_halal_only))
+# ✅ Register command handler
+app.add_handler(CommandHandler("autotrade", toggle_autotrade))
+# ✅ Register handler
+app.add_handler(CommandHandler("forex", send_forex_trade))
+# ✅ Register Handlers
+app.add_handler(CommandHandler("profit", add_profit))
+app.add_handler(CommandHandler("profits", show_profits))
+# ✅ Register Commands
+app.add_handler(CommandHandler("start", start_command))
+app.add_handler(CommandHandler("help", help_command))
