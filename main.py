@@ -628,26 +628,31 @@ def is_coin_halal_advanced(name: str, description: str = "") -> bool:
             return False
     return True
 
-# ✅ Tusaale Isticmaal (console test)
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import CallbackContext, CommandHandler, CallbackQueryHandler
+
+# Tusaale Isticmaal (console test)
 coin_name = "LuckyBetToken"
 coin_description = "A high-volume gambling dApp token"
+price = 0.00123  # tusaale qiime
+chart_url = "https://example.com/chart/luckybet"
+halal_only_mode = True  # toggle ON/OFF
 
 status = "🟢 Halal" if is_coin_halal_advanced(coin_name, coin_description) else "🔴 Haram"
 print(f"Token: {coin_name} → Status: {status}")
 
-async def send_coin_signal(context, chat_id, coin_name, msg):
-    # Hubi haddii coin-ka halal yahay
+# ✅ Function async ah si sax ah loogu diro fariinta
+async def send_coin_signal(context: CallbackContext, chat_id, coin_name, coin_description):
     if halal_only_mode:
         if not is_coin_halal_advanced(coin_name, coin_description):
             print(f"🚫 Coin-ka {coin_name} ma aha halal. Signal lama dirin.")
             return
-    message = f"🚀 {coin_name}\nPrice: ${price}\nChart: {chart_url}"
-    bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
 
-msg = f"🚨 {coin_name} Opportunity\nStatus: {'🟢 Halal' if is_coin_halal_advanced(coin_name, coin_description) else '🔴 Haram'}"
+    msg = f"🚨 {coin_name} Opportunity\nStatus: {'🟢 Halal' if is_coin_halal_advanced(coin_name, coin_description) else '🔴 Haram'}"
     await context.bot.send_message(chat_id=chat_id, text=msg)
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import CallbackContext, CommandHandler, CallbackQueryHandler
+
+    message = f"🚀 {coin_name}\nPrice: ${price}\nChart: {chart_url}"
+    await context.bot.send_message(chat_id=chat_id, text=message)
 
 # ✅ Global state
 halal_only_mode = False
