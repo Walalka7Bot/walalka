@@ -17,7 +17,7 @@ logging.basicConfig(
 )
 
 # ✅ Bot application instance
-app = ApplicationBuilder().token(BOT_TOKEN).build()
+app = ApplicationBuilder().token(7646....).build()
 
 # ✅ /start Command
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
