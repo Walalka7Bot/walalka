@@ -18,7 +18,7 @@ logging.basicConfig(
 )
 
 # ✅ Bot app initialization
-app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+ApplicationBuilder().token("7646...").build()
 
 # ✅ /start Command
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
