@@ -750,6 +750,22 @@ async def polymarket_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_markdown(msg, reply_markup=reply_markup)
 
 
+# ... (all your imports and global variables like app, flask_app, TELEGRAM_TOKEN, etc. should be at the top) ...
+
+# ✅ Telegram bot app initialization - Keep this global
+# app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()  <-- Halkan ha ku bilaabin app-ka
+# Waxaad u baahan tahay in app-ka lagu bilaabo goobal si ay routes-ka u isticmaali karaan.
+# Xaqiiji inaad haysato khadkaan meel ka sarreysa route-ka.
+
+# ✅ Flask app
+# flask_app = Flask(__name__) <-- Sidoo kale, tan global ka dhig
+
+
+# ... (all your helper functions) ...
+# ... (all your Telegram Commands handlers) ...
+# ... (all your Callback Query Handlers) ...
+# ... (all your Simulated Market Commands) ...
+
 # --- Webhook Handlers (Flask Routes) ---
 
 # ✅ Home route (for Render/Health Check)
@@ -757,19 +773,23 @@ async def polymarket_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 def home():
     return "✅ Hussein7 TradeBot is live!"
 
-# ✅ Telegram webhook handler (from webhook.py and main.py snippets)
+# ✅ Telegram webhook handler (CORRECTED based on previous advice)
 @flask_app.route('/telegram-webhook', methods=["POST"])
 async def telegram_webhook():
     update_json = request.get_json(force=True)
     try:
-        update = Update.de_json(update_json, app.bot)
-        await app.process_update(update)
+        # Instead of directly calling process_update here after de_json,
+        # we put the update into the app's update_queue.
+        # This allows the app's internal dispatcher to handle it properly,
+        # ensuring initialization state is correctly maintained.
+        update = Update.de_json(update_json, app.bot) # Convert JSON to Telegram Update object
+        await app.update_queue.put(update) # Put the update into the queue for processing
         return "OK"
     except Exception as e:
         logger.error(f"Telegram Webhook Error: {str(e)}", exc_info=True)
         return f"ERROR: {str(e)}", 500
 
-# ✅ Signal webhook endpoint (from signal_webhook.py)
+# ✅ Signal webhook endpoint (from signal_webhook.py) - This part generally looks fine
 @flask_app.route('/signal-webhook', methods=['POST'])
 async def signal_webhook(): # Changed to async for send_voice_alert
     try:
@@ -833,23 +853,16 @@ async def signal_webhook(): # Changed to async for send_voice_alert
         return f"❌ Webhook error: {str(e)}", 500
 
 
-# --- Main Execution ---
+# --- Main Execution (CORRECTED) ---
 
-async def main():
-    # Set up Web3 connection if INFURA_URL is provided
+async def setup_telegram_bot():
+    """This function handles all Telegram bot-specific setup."""
     global w3
-    if INFURA_URL:
-        try:
-            w3 = Web3(Web3.HTTPProvider(INFURA_URL))
-            if not w3.is_connected():
-                logger.warning("Failed to connect to Infura. ETH withdrawal might not work.")
-        except Exception as e:
-            logger.error(f"Error connecting to Web3: {e}")
 
-    # Add all command handlers
+    # Add all command handlers (these are added only once)
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("profit", log_profit_command)) # General profit logger
+    app.add_handler(CommandHandler("profit", log_profit_command))
     app.add_handler(CommandHandler("profits", show_profits_command))
     app.add_handler(CommandHandler("forex", send_forex_trade_command))
     app.add_handler(CommandHandler("autotrade", toggle_autotrade))
@@ -858,72 +871,53 @@ async def main():
     app.add_handler(CommandHandler("report", send_report_command))
     app.add_handler(CommandHandler("marketvisibility", toggle_market_visibility_command))
     app.add_handler(CommandHandler("search", search_command))
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_search_query)) # Handles text not starting with /
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_search_query))
     app.add_handler(CommandHandler("ictfilter", toggle_ict_filter_command))
     app.add_handler(CommandHandler("goal", goal_status_command))
-    app.add_handler(CommandHandler("addprofit", add_profit_goal_command)) # For goal tracker
+    app.add_handler(CommandHandler("addprofit", add_profit_goal_command))
 
-    # Simulated market commands (for demonstration/testing via Telegram)
     app.add_handler(CommandHandler("crypto", crypto_command))
     app.add_handler(CommandHandler("stocks", stocks_command))
     app.add_handler(CommandHandler("memecoins", memecoins_command))
     app.add_handler(CommandHandler("polymarket", polymarket_command))
 
-
-    # Add callback query handler for inline keyboard buttons
     app.add_handler(CallbackQueryHandler(handle_callback_query))
 
+    # Set up Web3 connection if INFURA_URL is provided
+    if INFURA_URL:
+        try:
+            w3 = Web3(Web3.HTTPProvider(INFURA_URL))
+            if not w3.is_connected():
+                logger.warning("Failed to connect to Infura. ETH withdrawal might not work.")
+        except Exception as e:
+            logger.error(f"Error connecting to Web3: {e}")
 
     # Set webhook for Telegram updates
-    WEBHOOK_URL = os.getenv("WEBHOOK_URL") # This should be your public URL /telegram-webhook
+    WEBHOOK_URL = os.getenv("WEBHOOK_URL")
     if not WEBHOOK_URL:
         logger.error("WEBHOOK_URL environment variable is not set. Webhook will not be set.")
-        # Fallback to polling for local testing if webhook not set
-        # For production, webhook is essential.
-        await app.run_polling()
+        # In this setup, we MUST have a webhook URL for Render.
+        raise ValueError("WEBHOOK_URL environment variable must be set for webhook deployment.")
     else:
+        # Initialize the application before setting webhook or processing updates
+        await app.initialize() # <--- Crucial step to fix "not initialized" error
+
+        # Start the updater which listens for updates on the queue.
+        # When a POST request hits /telegram-webhook, the update is put into this queue.
+        await app.updater.start()
+
         full_webhook_url = f"{WEBHOOK_URL}/telegram-webhook"
-        logger.info(f"Setting webhook to: {full_webhook_url}")
         await app.bot.set_webhook(url=full_webhook_url, allowed_updates=Update.ALL_TYPES)
+        logger.info(f"Telegram webhook set to: {full_webhook_url}")
         logger.info("Telegram webhook set successfully.")
 
-    # Start the Flask app (non-blocking in an async context)
-    # The Flask app needs to be run in a way that doesn't block the asyncio event loop.
-    # Uvicorn (or Gunicorn with uvicorn workers) is typically used for this in production.
-    # For a simple single-file setup like this, we'll let Flask run the server,
-    # but the `run_webhook` part of `python-telegram-bot` will process incoming updates.
-    # The flask_app.run() call should ideally be within a separate process or handled by a WSGI server.
-    # For demonstration/simple deployment, we run it in the main thread and assume it's exposed externally.
 
 if __name__ == "__main__":
-    # This block ensures that everything runs correctly when the script is executed.
-    # Flask's `app.run()` is blocking, so we need to ensure the Telegram bot's async loop
-    # is also running. A common pattern for combined Flask/Telegram is to run Flask
-    # with an ASGI server (like uvicorn) and have the Telegram bot's `process_update`
-    # called from Flask's webhook route.
+    # Create an asyncio task for the Telegram bot setup.
+    # This runs in the background without blocking the main thread.
+    asyncio.create_task(setup_telegram_bot())
 
-    # To run Flask and the Telegram Application in the same script without blocking,
-    # you'd typically use `uvicorn` to serve the Flask app, and inside the Flask app's
-    # webhook route, call `app.process_update`.
-
-    # For a simple `python main.py` execution, Flask's `app.run()` will block.
-    # A robust setup for production would look like this (using uvicorn):
-    # `uvicorn main:flask_app --host 0.0.0.0 --port 10000`
-    # And then the `main()` async function would just set the webhook.
-
-    # For this consolidated file, let's explicitly run both, but understand
-    # that `flask_app.run()` will block, so the `asyncio.run(main())` will
-    # set the webhook, but the event loop won't be actively polling unless
-    # flask's processing of updates keeps it alive.
-    # The current setup relies on Flask's endpoint triggering app.process_update.
-
-    # Run the main async setup for the Telegram bot first
-    # This will set the webhook before Flask starts listening
-    asyncio.run(main())
-
-    # Then run the Flask application. This is a blocking call.
-    # For production, consider using Gunicorn/Uvicorn to run Flask.
-    # Example: uvicorn main:flask_app --host 0.0.0.0 --port $PORT
+    # Now, run the Flask application. This is the blocking part that serves HTTP requests.
     PORT = int(os.getenv("PORT", 10000))
     logger.info(f"Starting Flask app on 0.0.0.0:{PORT}")
-    flask_app.run(host="0.0.0.0", port=PORT, debug=False) # Set debug=True for local development
+    flask_app.run(host="0.0.0.0", port=PORT, debug=False)
