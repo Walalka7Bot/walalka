@@ -1,5 +1,5 @@
 python-telegram-bot
-Flask
+Flask[async]  # <<< Halkan ayaad wax ka beddeleysaa
 gTTS
 fpdf
 web3
