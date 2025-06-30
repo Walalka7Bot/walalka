@@ -16,7 +16,9 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# ✅ Bot application instance
+import os
+
+TELEGRAM_TOKEN = os.getenv("BOT_TOKEN")
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
 # ✅ /start Command
