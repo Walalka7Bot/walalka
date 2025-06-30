@@ -1,4 +1,5 @@
- # ✅ Cutubka 1 – Hussein7 TradeBot Initialization + /start + /help + Admin Checker
+# ✅ Cutubka 1 – Hussein7 TradeBot Initialization + /start + /help + Admin Checker
+
 import os
 import logging
 from telegram import Update, BotCommand
@@ -7,8 +8,8 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 # ✅ Bot Token from .env
 TELEGRAM_TOKEN = os.getenv("BOT_TOKEN")
 
-# ✅ Admin list (change this to your own Telegram ID)
-ADMINS = [123456789]
+# ✅ Admin list (add your Telegram user ID)
+ADMINS = [123456789]  # ← Ku beddel Telegram ID-gaaga
 
 # ✅ Logging setup
 logging.basicConfig(
@@ -16,9 +17,7 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-import os
-
-TELEGRAM_TOKEN = os.getenv("BOT_TOKEN")
+# ✅ Bot app initialization
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
 # ✅ /start Command
@@ -36,14 +35,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_markdown(welcome_msg)
 
 # ✅ /help Command
-from telegram import Update
-from telegram.ext import ContextTypes, CommandHandler
-
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    welcome_text = (
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    help_text = (
         "🤖 *Walalka Tradebot Activated!*\n\n"
         "Welcome to your personal AI trading assistant.\n\n"
-        "📌 Use these commands to begin:\n"
+        "📌 Amarrada muhiimka ah:\n"
         "/forex – Forex trade ideas\n"
         "/crypto – Crypto signals\n"
         "/stocks – Stock updates\n"
@@ -56,14 +52,16 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/report – Get daily PDF report\n"
         "\n🚀 Let's grow your capital together!"
     )
-    await update.message.reply_markdown(welcome_text)
+    await update.message.reply_markdown(help_text)
 
-# ✅ Add handler to your application
-app.add_handler(CommandHandler("start", start_command))
-
-# ✅ Admin Checker (can be used for any admin-only command)
+# ✅ Admin Checker
 def is_admin(user_id: int) -> bool:
     return user_id in ADMINS
+
+# ✅ Add handlers
+app.add_handler(CommandHandler("start", start_command))
+app.add_handler(CommandHandler("help", help_command))
+
 # ✅ Cutubka 2: Profit Logger System
 from telegram.ext import CommandHandler
 from datetime import datetime
