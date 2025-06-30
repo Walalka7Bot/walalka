@@ -1,10 +1,12 @@
-python-telegram-bot==20.6
-flask
-gtts
-schedule
-requests
-python-dotenv
-eth-account
+python-telegram-bot
+Flask
+gTTS
+fpdf
 web3
+requests
+APScheduler
+# Optional, if you use it locally and ignore .env in git
+# python-dotenv
 reportlab
 Pillow
+eth-account
