@@ -1,12 +1,11 @@
+Flask
 python-telegram-bot
-Flask[async]  # <<< Halkan ayaad wax ka beddeleysaa
+uvicorn # <-- Hubi in khadkani jiro!
+web3
 gTTS
 fpdf
-web3
-requests
-APScheduler
-# Optional, if you use it locally and ignore .env in git
-# python-dotenv
 reportlab
 Pillow
-eth-account
+APScheduler
+requests
+python-dotenv
