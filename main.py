@@ -1,22 +1,28 @@
 import os
 import asyncio
 import logging
+import json
+import re
+import tempfile
+from datetime import datetime, timedelta
+from decimal import Decimal
+
+import requests
 from flask import Flask, request, jsonify
 from web3 import Web3
-# from web3.middleware import geth_poa_middleware # If you need this for PoA networks
-from eth_account import Account
 from gtts import gTTS
 from fpdf import FPDF
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from PIL import Image
 import io
-import json # For signal data filtering
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters
+    ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 )
+from telegram.constants import ChatAction
+from apscheduler.schedulers.background import BackgroundScheduler
 
 # Configure logging
 logging.basicConfig(
@@ -26,675 +32,705 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- Global Variables and Environment Configuration ---
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL") # This should be your public URL, e.g., https://your-app-name.onrender.com
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # This should be your public URL, e.g., https://your-app-name.onrender.com
 INFURA_URL = os.getenv("INFURA_URL")
 ETH_PRIVATE_KEY = os.getenv("ETH_PRIVATE_KEY")
-CHAT_ID = os.getenv("CHAT_ID")
+CHAT_ID = os.getenv("CHAT_ID", "YOUR_CHAT_ID")
 ADMIN_IDS_STR = os.getenv("ADMIN_IDS")
-ADMIN_IDS = [int(x.strip()) for x in ADMIN_IDS_STR.split(',')] if ADMIN_IDS_STR else []
+ADMIN_IDS = [int(x.strip()) for x in ADMIN_IDS_STR.split(',')] if ADMIN_IDS_STR else [123456789] # Change to your actual Telegram user ID
 
-# Global Application instance
+PROFIT_FILE = "profits.json"
+REPORTS_DIR = "reports"
+os.makedirs(REPORTS_DIR, exist_ok=True)
+trade_log = [] # Diiwaanka ganacsiyada maalinlaha ah
+
+# Goal Tracker
+GOAL_AMOUNT = Decimal(os.getenv("GOAL_AMOUNT", "650")) # USD
+GOAL_DAYS = int(os.getenv("GOAL_DAYS", "10"))
+START_DATE_STR = os.getenv("START_DATE", "2025-06-20")
+START_DATE = datetime.strptime(START_DATE_STR, "%Y-%m-%d")
+goal_progress = [] # Each element is (date_str, profit)
+
+# Autotrade state
+auto_trade_enabled = False
+
+# Halal Only Mode toggle state
+halal_only_mode = False
+
+# Hidden Markets state
+hidden_markets = set()
+
+# Account Balance for lot size calculation
+ACCOUNT_BALANCE = Decimal(os.getenv("ACCOUNT_BALANCE", "5000"))
+DAILY_MAX_RISK = Decimal(os.getenv("DAILY_MAX_RISK", "250"))
+
+# Web3 setup
+w3 = Web3(Web3.HTTPProvider(INFURA_URL))
+BOT_WALLET = os.getenv("WALLET_ADDRESS_ETH")
+BOT_PRIVATE_KEY = os.getenv("PRIVATE_KEY_ETH")
+WITHDRAW_TO = os.getenv("WITHDRAW_TO", "0xReceiverWalletAddressHere")
+
+# Push App Webhook URL
+PUSH_APP_WEBHOOK_URL = os.getenv("PUSH_APP_WEBHOOK_URL")
+
+# Notion API
+NOTION_API_TOKEN = os.getenv("NOTION_API_TOKEN")
+NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
+NOTION_HEADERS = {
+    "Authorization": f"Bearer {NOTION_API_TOKEN}",
+    "Content-Type": "application/json",
+    "Notion-Version": "2022-06-28"
+}
+
+# ICT Filter state
+ict_filter_enabled = True
+
+# Global Application instance for Telegram
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
 # Flask app instance
 flask_app = Flask(__name__)
 
-# Global Web3 instance
-w3 = None
+# Liiska erayada haramta ah for advanced check
+HARAM_KEYWORDS = [
+    "casino", "bet", "gambling", "poker", "lottery", "loan", "riba", "interest",
+    "liquor", "alcohol", "wine", "beer", "vodka", "whiskey", "xxx", "sex", "porn",
+    "shisha", "cigarette", "hookah", "rum", "cocktail", "drunk", "bar", "pepe" # Added pepe from snippet 16
+]
 
-# In-memory storage for simplicity (for persistent data, use a database)
-user_data = {} # To store autotrade status, etc.
-profit_goals = {} # {user_id: goal_amount}
-current_profits = {} # {user_id: current_total_profit}
-user_market_visibility = {} # {user_id: {market: True/False}}
-user_ict_filter_status = {} # {user_id: True/False}
-user_search_mode = {} # {user_id: True/False}
+# --- Helper Functions ---
 
-# --- Helper Functions (keep these as they are, just ensure they use 'app.bot' for sending messages) ---
-async def send_voice_alert(text, bot_instance, chat_id):
+def is_admin(user_id: int) -> bool:
+    return user_id in ADMINS
+
+# Function to check if autotrade is on
+def is_autotrade_on() -> bool:
+    return auto_trade_enabled
+
+# Function: Save daily profit
+def save_profit(amount: float):
+    today = datetime.now().strftime("%Y-%m-%d")
+    profits = load_profits()
+    profits[today] = profits.get(today, 0) + amount
+    with open(PROFIT_FILE, "w") as f:
+        json.dump(profits, f)
+
+# Function: Load profits
+def load_profits():
+    if not os.path.exists(PROFIT_FILE):
+        return {}
+    with open(PROFIT_FILE, "r") as f:
+        return json.load(f)
+
+# Function: Calculate lot size based on SL pips and pip value
+def calculate_lot_size(sl_distance_pips: float, pip_value: float = 10.0) -> float:
+    if sl_distance_pips == 0:
+        return 0.0  # Avoid division by zero
+    risk_per_trade = DAILY_MAX_RISK
+    # Ensure all calculations are with Decimal for precision
+    lot_size = (risk_per_trade / Decimal(str(sl_distance_pips))) / Decimal(str(pip_value))
+    return round(float(lot_size), 2)
+
+# Function: Dir push notification (text only)
+def send_push_notification(message: str) -> str:
     try:
-        if not text.strip():
-            logger.warning("Voice alert text is empty, skipping.")
-            return
-
-        tts = gTTS(text=text, lang='en')
-        audio_fp = io.BytesIO()
-        tts.save(audio_fp)
-        audio_fp.seek(0)
-        await bot_instance.send_voice(chat_id=chat_id, voice=audio_fp)
-        logger.info(f"Voice alert sent for chat {chat_id}")
+        if not PUSH_APP_WEBHOOK_URL:
+            raise ValueError("PUSH_APP_WEBHOOK_URL not set.")
+        payload = {
+            "title": " 📢  Hussein7 Trade Alert",
+            "message": message
+        }
+        response = requests.post(PUSH_APP_WEBHOOK_URL, json=payload)
+        if response.status_code == 200:
+            return " ✅  Push sent"
+        else:
+            return f" ❌  Push failed: {response.text}"
     except Exception as e:
-        logger.error(f"Error sending voice alert: {e}", exc_info=True)
+        return f"[Push Error]: {e}"
 
-def get_voice_text(alert_type):
-    if alert_type == "signal":
-        return "New signal detected."
-    elif alert_type == "profit":
-        return "Profit logged."
-    elif alert_type == "withdrawal_success":
-        return "Ethereum withdrawal successful."
-    elif alert_type == "withdrawal_failed":
-        return "Ethereum withdrawal failed."
-    return ""
+# Function: Abuur report PDF
+def generate_daily_report(trades: list):
+    today = datetime.now().strftime("%Y-%m-%d")
+    filename = f"{REPORTS_DIR}/TradeReport_{today}.pdf"
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt=f" 📄 Trade Report – {today}", ln=True, align="C")
+    pdf.ln(10)
+    for i, trade in enumerate(trades, 1):
+        text = (
+            f"{i}. Pair: {trade.get('symbol', 'N/A')}\n"
+            f" Direction: {trade.get('direction', 'N/A')}\n"
+            f" Timeframe: {trade.get('timeframe', 'N/A')}\n"
+            f" Result: {trade.get('result', 'N/A')}\n"
+            f" P&L: {trade.get('pnl', 'N/A')}\n"
+        )
+        pdf.multi_cell(0, 10, txt=text)
+        pdf.ln(2)
+    pdf.output(filename)
+    return filename
 
-def is_admin(user_id):
-    return user_id in ADMIN_IDS
+def push_trade_to_notion(symbol, direction, timeframe, result, pnl):
+    url = "https://api.notion.com/v1/pages"
+    payload = {
+        "parent": {"database_id": NOTION_DATABASE_ID},
+        "properties": {
+            "Date": {
+                "date": {"start": datetime.now().strftime("%Y-%m-%d")}
+            },
+            "Symbol": {
+                "title": [{"text": {"content": symbol}}]
+            },
+            "Direction": {
+                "rich_text": [{"text": {"content": direction}}]
+            },
+            "Timeframe": {
+                "rich_text": [{"text": {"content": timeframe}}]
+            },
+            "Result": {
+                "rich_text": [{"text": {"content": result}}]
+            },
+            "P&L": {
+                "number": float(pnl)
+            }
+        }
+    }
+    response = requests.post(url, headers=NOTION_HEADERS, json=payload)
+    if response.status_code != 200:
+        logger.error(f" ❌ Notion Push Failed: {response.text}")
+    else:
+        logger.info(" ✅ Trade pushed to Notion.")
 
-def should_send_signal_based_on_filters(signal_data):
-    """
-    Checks if a signal should be sent based on user filters.
-    This logic needs to iterate through all relevant users/groups.
-    For simplicity, let's assume we send to CHAT_ID and check its settings.
-    """
-    if CHAT_ID:
-        chat_id = int(CHAT_ID)
-        # Check market visibility
-        if chat_id in user_market_visibility:
-            market_settings = user_market_visibility[chat_id]
-            if not market_settings.get(signal_data["market"].lower(), True):
-                logger.info(f"Signal for {signal_data['symbol']} ({signal_data['market']}) filtered by market visibility for chat {chat_id}.")
-                return False
-
-        # Check ICT filter (if enabled for this chat)
-        if user_ict_filter_status.get(chat_id, False):
-            if not (signal_data.get("liquidity") or signal_data.get("order_block") or signal_data.get("fvg")):
-                logger.info(f"Signal for {signal_data['symbol']} filtered by ICT due to missing ICT elements for chat {chat_id}.")
-                return False
-        
-        # Check Halal only filter
-        if user_data.get(chat_id, {}).get('halal_only', False):
-            if signal_data["market"].lower() in ["crypto", "memecoins"] and not is_coin_halal(signal_data["symbol"], signal_data["description"]):
-                logger.info(f"Signal for {signal_data['symbol']} filtered by Halal Only for chat {chat_id}.")
-                return False
-    return True # Default to sending if no specific filters prevent it or if CHAT_ID is not set (will be caught later).
-
-# Example for is_coin_halal - expand as needed
-def is_coin_halal(symbol, description):
-    # This is a placeholder. You need a robust method to determine halal status.
-    # This could involve an external API, a database, or a more complex rule set.
-    haram_keywords = ["gambling", "porn", "alcohol", "interest", "riba", "lending", "borrowing"]
-    for keyword in haram_keywords:
-        if keyword in description.lower() or keyword in symbol.lower():
+# Function: go'aami haddii coin uu halal yahay iyadoo la eegayo magaca + sharaxaadiisa (Advanced Version)
+def is_coin_halal_advanced(name: str, description: str = "") -> bool:
+    combined_text = f"{name} {description}".lower()
+    for haram_word in HARAM_KEYWORDS:
+        # Use regex to match whole words only
+        if re.search(rf"\b{re.escape(haram_word)}\b", combined_text):
             return False
-    # More sophisticated logic would be needed here.
     return True
 
-# --- Telegram Command Handlers (keep these as they are) ---
-# (start_command, help_command, log_profit_command, show_profits_command, etc.)
-# ... (paste all your command handlers here, from start_command to add_profit_goal_command) ...
+# Helper to get voice text based on status
+def get_voice_text(status: str) -> str:
+    if status == "TP":
+        return "Congratulations! Take Profit hit! 💰 "
+    elif status == "SL":
+        return "Stop Loss hit. Wax meynas galay... 😢 "
+    else:
+        return "New signal alert."
 
-async def start_command(update: Update, context):
+def calculate_goal_status():
+    total_profit = sum(p[1] for p in goal_progress)
+    days_passed = (datetime.now() - START_DATE).days + 1
+    daily_target = GOAL_AMOUNT / GOAL_DAYS
+    projected = days_passed * daily_target
+    percent = round((total_profit / GOAL_AMOUNT) * 100, 1)
+    return total_profit, projected, percent, days_passed
+
+# --- Telegram Bot Commands & Handlers ---
+
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    await update.message.reply_html(
-        f"Assalamu Alaikum {user.mention_html()}! I am your AI trading assistant. "
-        "Type /help to see available commands."
+    welcome_msg = (
+        f" 👋  Salaam {user.first_name},\n\n"
+        "Ku soo dhawoow *Hussein7 TradeBot* 📊🤖 \n\n"
+        " ✅  Forex Signals\n"
+        " ✅  Crypto Alerts\n"
+        " ✅  Stock Opportunities\n"
+        " ✅  Memecoin Webhook Detector\n\n"
+        "Isticmaal `/help` si aad u aragto amarrada oo dhan."
     )
-    # Initialize user settings if not present
-    if user.id not in user_data:
-        user_data[user.id] = {'autotrade_enabled': False, 'halal_only': False}
-    if user.id not in user_market_visibility:
-        user_market_visibility[user.id] = {
-            "forex": True, "crypto": True, "stocks": True, "memecoins": True, "polymarket": True
-        }
-    if user.id not in user_ict_filter_status:
-        user_ict_filter_status[user.id] = False
-    logger.info(f"User {user.id} ({user.first_name}) started the bot.")
+    await update.message.reply_markdown(welcome_msg)
 
-async def help_command(update: Update, context):
-    help_text = (
-        "Here are the commands you can use:\n"
-        "/start - Start the bot and get a greeting.\n"
-        "/help - Show this help message.\n"
-        "/profit <amount> - Log your profit for today. Example: /profit 100\n"
-        "/profits - Show your total logged profits.\n"
-        "/forex - Simulate a Forex trade signal.\n"
-        "/autotrade - Toggle auto-trading feature (admins only).\n"
-        "/halalonly - Toggle Halal-only filter for crypto/memecoin signals.\n"
-        "/withdraw_eth <amount> <address> - Withdraw ETH from the bot's wallet (admins only).\n"
-        "/report - Generate and send a PDF report of your profits.\n"
-        "/marketvisibility - Toggle visibility for specific markets (Forex, Crypto, Stocks, Memecoins, Polymarket).\n"
-        "/search <query> - Search for information (e.g., crypto, financial news).\n"
-        "/ictfilter - Toggle ICT (Inner Circle Trader) filter for signals.\n"
-        "/goal - Show your current profit goal and progress.\n"
-        "/addprofit <amount> - Add profit to your goal tracker.\n"
-        "\n*Simulated Market Commands (for testing):*\n"
-        "/crypto - Simulate a Crypto trade signal.\n"
-        "/stocks - Simulate a Stocks trade signal.\n"
-        "/memecoins - Simulate a Memecoins trade signal.\n"
-        "/polymarket - Simulate a Polymarket signal."
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    help_msg = (
+        " 🧠  *Amarada la heli karo:*\n\n"
+        "/start – Bilow botka\n"
+        "/help – Liiska amarada\n"
+        "/profit – Ku dar profit\n"
+        "/profits – Fiiri profits\n"
+        "/withdraw_eth – ETH u dir\n"
+        "/autotrade – Auto Trade On/Off\n"
+        "/halalonly – Filter Halal Coins\n"
+        "/forex, /crypto, /stocks, /polymarket, /memecoins – Arag signalada\n"
+        "/report – Daily PDF report\n"
+        "/goal – Fiiri horumarka goal-ka\n"
+        "/addprofit – Ku dar profit goal-ka"
     )
-    await update.message.reply_text(help_text)
-    logger.info(f"User {update.effective_user.id} requested help.")
+    await update.message.reply_markdown(help_msg)
 
-async def log_profit_command(update: Update, context):
-    if not is_admin(update.effective_user.id):
-        await update.message.reply_text("You are not authorized to use this command.")
-        return
-
+async def add_profit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         amount = float(context.args[0])
-        user_id = update.effective_user.id
-        today = datetime.now().strftime("%Y-%m-%d")
-
-        if user_id not in current_profits:
-            current_profits[user_id] = 0.0
-
-        current_profits[user_id] += amount
-        
-        # Store profit for daily report
-        if user_id not in user_data:
-            user_data[user_id] = {}
-        if 'daily_profits' not in user_data[user_id]:
-            user_data[user_id]['daily_profits'] = {}
-        if today not in user_data[user_id]['daily_profits']:
-            user_data[user_id]['daily_profits'][today] = 0.0
-        
-        user_data[user_id]['daily_profits'][today] += amount
-
-        await update.message.reply_text(f"Profit of ${amount:.2f} logged for today. Total profit: ${current_profits[user_id]:.2f}")
-        await send_voice_alert(get_voice_text("profit"), app.bot, update.effective_chat.id) # Pass app.bot
-
-        logger.info(f"Admin {user_id} logged profit: ${amount}. Total: ${current_profits[user_id]}")
-
+        save_profit(amount)
+        await update.message.reply_text(f" ✅  Profit of ${amount} saved for today.")
     except (IndexError, ValueError):
-        await update.message.reply_text("Usage: /profit <amount>")
-    except Exception as e:
-        logger.error(f"Error logging profit: {e}", exc_info=True)
-        await update.message.reply_text("An error occurred while logging profit.")
+        await update.message.reply_text(" ❗  Usage: /profit 120.5")
 
-async def show_profits_command(update: Update, context):
-    user_id = update.effective_user.id
-    total_profit = current_profits.get(user_id, 0.0)
-    await update.message.reply_text(f"Your total logged profits: ${total_profit:.2f}")
-    logger.info(f"User {user_id} requested total profits: ${total_profit}")
-
-async def toggle_autotrade(update: Update, context):
-    if not is_admin(update.effective_user.id):
-        await update.message.reply_text("You are not authorized to use this command.")
+async def show_profits(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    profits = load_profits()
+    if not profits:
+        await update.message.reply_text(" 📭  No profit records found.")
         return
+    msg = " 📊  Daily Profit Log:\n"
+    total = 0
+    for date, amount in sorted(profits.items()):
+        msg += f"{date}: ${amount:.2f}\n"
+        total += amount
+    msg += f"\n 💰  Total: ${total:.2f}"
+    await update.message.reply_text(msg)
 
-    user_id = update.effective_user.id
-    if user_id not in user_data:
-        user_data[user_id] = {'autotrade_enabled': False}
+async def send_forex_trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Forex signal example
+    pair = "EURUSD"
+    direction = "BUY"
+    entry = 1.0950
+    tp = 1.1000
+    sl = 1.0910
     
-    user_data[user_id]['autotrade_enabled'] = not user_data[user_id]['autotrade_enabled']
-    status = "enabled" if user_data[user_id]['autotrade_enabled'] else "disabled"
-    await update.message.reply_text(f"Auto-trading is now {status}.")
-    logger.info(f"Admin {user_id} toggled autotrade to {status}.")
+    # Check if market is hidden
+    if "forex" in hidden_markets:
+        await update.message.reply_text(f" 📵 Skipped {pair} – Forex market is currently hidden.")
+        return
 
-async def toggle_halal_only_command(update: Update, context):
-    user_id = update.effective_user.id
-    if user_id not in user_data:
-        user_data[user_id] = {'halal_only': False} # Ensure the key exists
+    # Halal label (optional, using advanced check for consistency)
+    halal_status = " 🟢  Halal" if is_coin_halal_advanced(pair) else " 🔴  Haram"
+    msg = (
+        f" 📈  Forex Trade Alert\n"
+        f"Pair: {pair}\n"
+        f"Direction: {direction}\n"
+        f"Entry: {entry}\n"
+        f"TP: {tp}\n"
+        f"SL: {sl}\n"
+        f"Status: {halal_status}"
+    )
+    # Buttons: Confirm or Ignore
+    buttons = [
+        [InlineKeyboardButton(" ✅  Confirm", callback_data="FOREX_CONFIRM")],
+        [InlineKeyboardButton(" ❌  Ignore", callback_data="FOREX_IGNORE")]
+    ]
+    reply_markup = InlineKeyboardMarkup(buttons)
+    await update.message.reply_text(msg, reply_markup=reply_markup)
 
-    user_data[user_id]['halal_only'] = not user_data[user.id]['halal_only']
-    status = "enabled" if user_data[user_id]['halal_only'] else "disabled"
-    await update.message.reply_text(f"Halal-only filter for crypto/memecoin signals is now {status}.")
-    logger.info(f"User {user_id} toggled Halal-only filter to {status}.")
+async def toggle_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global auto_trade_enabled
+    auto_trade_enabled = not auto_trade_enabled
+    status = " ✅  AutoTrade Mode is ON" if auto_trade_enabled else " ❌  AutoTrade Mode is OFF"
+    await update.message.reply_text(status)
 
-async def withdraw_eth_command(update: Update, context):
+async def toggle_halal_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global halal_only_mode
+    halal_only_mode = not halal_only_mode
+    status = (" ✅  Halal Only Mode is ON  —  Only halal coins will be shown."
+              if halal_only_mode else
+              " ❌  Halal Only Mode is OFF  —  All coins will be shown.")
+    await update.message.reply_text(status)
+
+async def withdraw_eth(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
-        await update.message.reply_text("You are not authorized to use this command.")
+        await update.message.reply_text(" ❌  You are not authorized to use this command.")
         return
-
-    if not w3 or not w3.is_connected():
-        await update.message.reply_text("Ethereum node not connected. Cannot process withdrawal.")
-        logger.error("ETH withdrawal requested but Infura node is not connected.")
-        return
-
-    if not ETH_PRIVATE_KEY:
-        await update.message.reply_text("ETH_PRIVATE_KEY is not set. Cannot withdraw.")
-        logger.error("ETH_PRIVATE_KEY is not set.")
-        return
-
     try:
-        amount_eth = float(context.args[0])
-        to_address = context.args[1]
+        sender_address = BOT_WALLET
+        receiver_address = WITHDRAW_TO
 
-        # Convert ETH to Wei
-        amount_wei = w3.to_wei(amount_eth, 'ether')
+        # Check balance
+        balance = w3.eth.get_balance(sender_address)
+        eth_balance = w3.from_wei(balance, 'ether')
+        if eth_balance < 0.002:
+            await update.message.reply_text(" ❌  Not enough ETH to withdraw. Minimum 0.002 ETH required.")
+            return
 
-        # Get account from private key
-        account = Account.from_key(ETH_PRIVATE_KEY)
-        from_address = account.address
-
-        # Get nonce
-        nonce = w3.eth.get_transaction_count(from_address)
-
-        # Estimate gas (simple estimation, can be more complex)
-        # It's crucial to have enough ETH for gas!
+        # Prepare transaction
+        nonce = w3.eth.get_transaction_count(sender_address)
         gas_price = w3.eth.gas_price
-        estimated_gas = 21000 # Standard gas for simple ETH transfer
-
-        # Build transaction
-        transaction = {
-            'from': from_address,
-            'to': to_address,
-            'value': amount_wei,
+        value = balance - (21000 * gas_price)  # Leave enough for gas
+        tx = {
             'nonce': nonce,
-            'gas': estimated_gas,
-            'gasPrice': gas_price
+            'to': receiver_address,
+            'value': value,
+            'gas': 21000,
+            'gasPrice': gas_price,
         }
-
-        # Sign transaction
-        signed_txn = w3.eth.account.sign_transaction(transaction, ETH_PRIVATE_KEY)
-
-        # Send transaction
-        tx_hash = w3.eth.send_raw_transaction(signed_txn.rawTransaction)
-        await update.message.reply_text(f"Attempting to withdraw {amount_eth} ETH to {to_address}. Transaction Hash: {tx_hash.hex()}")
-        await send_voice_alert(get_voice_text("withdrawal_success"), app.bot, update.effective_chat.id)
-        logger.info(f"ETH withdrawal initiated by {update.effective_user.id}: {amount_eth} ETH to {to_address}. Tx: {tx_hash.hex()}")
-
-    except (IndexError, ValueError):
-        await update.message.reply_text("Usage: /withdraw_eth <amount> <address>")
+        # Sign + send transaction
+        signed_tx = w3.eth.account.sign_transaction(tx, private_key=BOT_PRIVATE_KEY)
+        tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        await update.message.reply_text(f" ✅  ETH Withdrawn\n 🔗  TX Hash: {w3.to_hex(tx_hash)}")
     except Exception as e:
-        await update.message.reply_text(f"Error during ETH withdrawal: {e}")
-        await send_voice_alert(get_voice_text("withdrawal_failed"), app.bot, update.effective_chat.id)
-        logger.error(f"Error during ETH withdrawal by {update.effective_user.id}: {e}", exc_info=True)
+        await update.message.reply_text(f" ❌  Error during withdrawal: {str(e)}")
 
-async def send_report_command(update: Update, context):
-    user_id = update.effective_user.id
-    if user_id not in user_data or 'daily_profits' not in user_data[user_id]:
-        await update.message.reply_text("No profit data available to generate a report.")
+async def send_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not trade_log:
+        await update.message.reply_text("Ma jiro trade maanta la qaaday.")
         return
+    file_path = generate_daily_report(trade_log)
+    with open(file_path, "rb") as f:
+        await context.bot.send_document(chat_id=update.effective_chat.id, document=f, filename=os.path.basename(file_path))
+    os.remove(file_path) # Clean up the generated PDF
 
-    try:
-        daily_profits = user_data[user_id]['daily_profits']
-        
-        pdf_buffer = io.BytesIO()
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        
-        pdf.cell(200, 10, txt="Daily Profit Report", ln=True, align="C")
-        pdf.ln(10) # Add some line breaks
+async def goal_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    total_profit, projected, percent, days_passed = calculate_goal_status()
+    status = (
+        f" 🎯 *Goal Tracker*\n"
+        f"Duration: {GOAL_DAYS} days\n"
+        f"Goal: ${GOAL_AMOUNT:.2f}\n"
+        f"Day: {days_passed}\n"
+        f"Progress: ${total_profit:.2f} / ${GOAL_AMOUNT:.2f}\n"
+        f"Projected by now: ${projected:.2f}\n"
+        f"Completion: {percent}%"
+    )
+    await update.message.reply_text(status, parse_mode="Markdown")
 
-        for date, profit in daily_profits.items():
-            pdf.cell(200, 10, txt=f"Date: {date}, Profit: ${profit:.2f}", ln=True)
-
-        pdf.output(pdf_buffer)
-        pdf_buffer.seek(0)
-        
-        await update.message.reply_document(document=pdf_buffer, filename="profit_report.pdf")
-        logger.info(f"User {user_id} requested and received profit report.")
-
-    except Exception as e:
-        logger.error(f"Error generating or sending PDF report: {e}", exc_info=True)
-        await update.message.reply_text("An error occurred while generating the report.")
-
-async def toggle_market_visibility_command(update: Update, context):
-    user_id = update.effective_user.id
-    if user_id not in user_market_visibility:
-        user_market_visibility[user_id] = {
-            "forex": True, "crypto": True, "stocks": True, "memecoins": True, "polymarket": True
-        }
-    
-    current_settings = user_market_visibility[user_id]
-    
-    if not context.args:
-        # Display current settings and offer buttons
-        message = "Current market visibility settings:\n"
-        for market, visible in current_settings.items():
-            message += f"{market.capitalize()}: {'✅ Visible' if visible else '❌ Hidden'}\n"
-        
-        buttons = []
-        for market in ["forex", "crypto", "stocks", "memecoins", "polymarket"]:
-            label = f"Toggle {market.capitalize()}"
-            callback_data = f"TOGGLE_MARKET:{market}"
-            buttons.append([InlineKeyboardButton(label, callback_data=callback_data)])
-        
-        reply_markup = InlineKeyboardMarkup(buttons)
-        await update.message.reply_text(message, reply_markup=reply_markup)
-        logger.info(f"User {user_id} requested market visibility settings.")
-    else:
-        # Direct toggle via command (e.g., /marketvisibility forex)
-        market_to_toggle = context.args[0].lower()
-        if market_to_toggle in current_settings:
-            current_settings[market_to_toggle] = not current_settings[market_to_toggle]
-            status = "visible" if current_settings[market_to_toggle] else "hidden"
-            await update.message.reply_text(f"{market_to_toggle.capitalize()} signals are now {status}.")
-            logger.info(f"User {user_id} toggled {market_to_toggle} visibility to {status}.")
-        else:
-            await update.message.reply_text(f"Invalid market: {market_to_toggle}. Available: forex, crypto, stocks, memecoins, polymarket.")
-
-async def search_command(update: Update, context):
-    user_id = update.effective_user.id
-    if not context.args:
-        user_search_mode[user_id] = True
-        await update.message.reply_text("Please enter your search query. I can search for crypto info, financial news, etc. Type /search again to exit search mode.")
-    else:
-        query = " ".join(context.args)
-        await update.message.reply_text(f"Searching for: {query} (Feature to be implemented)")
-        # In a real bot, you'd integrate with a search API (e.g., Google Search, Brave Search, specific crypto APIs)
-        user_search_mode[user_id] = False # Exit search mode after direct query
-    logger.info(f"User {user_id} initiated search mode or performed direct search: {context.args}")
-
-async def handle_search_query(update: Update, context):
-    user_id = update.effective_user.id
-    if user_search_mode.get(user_id, False):
-        query = update.message.text
-        if query.lower() == "/search": # Allow exiting search mode
-            user_search_mode[user_id] = False
-            await update.message.reply_text("Exited search mode.")
-            return
-
-        await update.message.reply_text(f"Searching for: {query} (Feature to be implemented)")
-        # In a real bot, you'd integrate with a search API (e.g., Google Search, Brave Search, specific crypto APIs)
-        logger.info(f"User {user_id} searching: {query}")
-        # Optionally, you could keep them in search mode until they type /exitsearch or /search again
-
-async def toggle_ict_filter_command(update: Update, context):
-    user_id = update.effective_user.id
-    if user_id not in user_ict_filter_status:
-        user_ict_filter_status[user_id] = False # Default to disabled
-    
-    user_ict_filter_status[user_id] = not user_ict_filter_status[user_id]
-    status = "enabled" if user_ict_filter_status[user_id] else "disabled"
-    await update.message.reply_text(f"ICT filter for signals is now {status}. Only signals with liquidity, order block, or FVG will be sent.")
-    logger.info(f"User {user_id} toggled ICT filter to {status}.")
-
-async def goal_status_command(update: Update, context):
-    user_id = update.effective_user.id
-    goal = profit_goals.get(user_id)
-    current_profit = current_profits.get(user_id, 0.0)
-
-    if goal is None:
-        await update.message.reply_text("You haven't set a profit goal yet. Use /addprofit to set one.")
-    else:
-        progress = (current_profit / goal) * 100 if goal > 0 else 0
-        await update.message.reply_text(f"Your profit goal: ${goal:.2f}\n"
-                                     f"Current profit: ${current_profit:.2f}\n"
-                                     f"Progress: {progress:.2f}%")
-    logger.info(f"User {user_id} checked profit goal.")
-
-async def add_profit_goal_command(update: Update, context):
-    user_id = update.effective_user.id
+async def add_profit_to_goal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         amount = float(context.args[0])
-        if amount <= 0:
-            await update.message.reply_text("Please enter a positive amount for your profit goal.")
-            return
-        
-        profit_goals[user_id] = amount
-        current_profits[user_id] = current_profits.get(user_id, 0.0) # Ensure current_profits is initialized
-        await update.message.reply_text(f"Your profit goal has been set to ${amount:.2f}.")
-        logger.info(f"User {user_id} set profit goal to ${amount}.")
-    except (IndexError, ValueError):
-        await update.message.reply_text("Usage: /addprofit <amount>")
-    except Exception as e:
-        logger.error(f"Error setting profit goal: {e}", exc_info=True)
-        await update.message.reply_text("An error occurred while setting the profit goal.")
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        goal_progress.append((today_str, amount))
+        await update.message.reply_text(f" ✅ Added profit: ${amount:.2f}")
+    except Exception:
+        await update.message.reply_text(" ❌ Usage: /addprofit 100")
 
-# --- Simulated Market Signal Commands (keep these as they are) ---
-async def send_forex_trade_command(update: Update, context):
-    if not is_admin(update.effective_user.id):
-        await update.message.reply_text("You are not authorized to use this command.")
-        return
-    # This is a placeholder for a simulated signal
-    signal_data = {
-        "symbol": "EURUSD", "direction": "BUY", "timeframe": "15min", "market": "forex",
-        "entry_price": "1.0850", "stop_loss": "1.0820", "take_profit": "1.0900",
-        "description": "Strong bullish momentum on lower timeframe. Expect break of structure.",
-        "liquidity": True, "order_block": False, "fvg": True
+async def toggle_market_visibility(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    markets = ["Forex", "Crypto", "Stocks", "Polymarket", "Memecoins"]
+    buttons = []
+    for mkt in markets:
+        is_hidden = mkt.lower() in hidden_markets
+        label = f"{' ❌ ' if is_hidden else ' ✅ '} {mkt}"
+        buttons.append([InlineKeyboardButton(label, callback_data=f"TOGGLE_MARKET:{mkt.lower()}")])
+    reply_markup = InlineKeyboardMarkup(buttons)
+    await update.message.reply_text("Toggle Market Visibility:", reply_markup=reply_markup)
+
+async def handle_toggle_market_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data.split(":")
+    if data[0] == "TOGGLE_MARKET":
+        market = data[1]
+        if market in hidden_markets:
+            hidden_markets.remove(market)
+            await query.edit_message_text(f" ✅ {market.capitalize()} market is now **VISIBLE**.", parse_mode="Markdown")
+        else:
+            hidden_markets.add(market)
+            await query.edit_message_text(f" ❌ {market.capitalize()} market is now **HIDDEN**.", parse_mode="Markdown")
+
+async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(" 🔍 Please type the symbol or coin name you want to search.")
+
+async def handle_search_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.message.text.strip().upper()
+    # Example fake signal DB (replace with actual data source)
+    fake_signals = {
+        "EURUSD": {"market": "forex", "dir": "BUY", "tf": "5min"},
+        "BTC": {"market": "crypto", "dir": "SELL", "tf": "15min"},
+        "TSLA": {"market": "stocks", "dir": "BUY", "tf": "1H"},
+        "TRUMP2024": {"market": "polymarket", "dir": "YES", "tf": "Event"},
     }
-    await send_simulated_signal(signal_data, update.effective_chat.id)
-    logger.info(f"Admin {update.effective_user.id} simulated Forex signal.")
+    if query in fake_signals:
+        signal = fake_signals[query]
+        message = (
+            f" 🔍 Found Signal\n"
+            f"Market: {signal['market'].capitalize()}\n"
+            f"Symbol: {query}\n"
+            f"Direction: {signal['dir']}\n"
+            f"Timeframe: {signal['tf']}"
+        )
+    else:
+        message = f" ❌ No signal found for {query}"
+    await update.message.reply_text(message)
 
-async def crypto_command(update: Update, context):
-    if not is_admin(update.effective_user.id):
-        await update.message.reply_text("You are not authorized to use this command.")
-        return
-    signal_data = {
-        "symbol": "BTC/USDT", "direction": "SELL", "timeframe": "1h", "market": "crypto",
-        "entry_price": "65000", "stop_loss": "65500", "take_profit": "64000",
-        "description": "Bearish divergence on RSI, anticipating a dump. Not Sharia Compliant for some.",
-        "liquidity": True, "order_block": True, "fvg": False
+async def toggle_ict_filter(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global ict_filter_enabled
+    ict_filter_enabled = not ict_filter_enabled
+    status = " ✅ ICT Filter ENABLED" if ict_filter_enabled else " ❌ ICT Filter DISABLED"
+    await update.message.reply_text(f"{status}\nOnly high-probability ICT-style Forex trades will be shown.")
+
+# ICT-style detection logic (very basic sample)
+def is_ict_compliant(signal: dict) -> bool:
+    """
+    Signal example: {
+        "symbol": "EURUSD", "direction": "BUY", "timeframe": "5min", "market": "forex",
+        "liquidity": "grabbed", "order_block": True, "fvg": True, "time": "10:15"
     }
-    await send_simulated_signal(signal_data, update.effective_chat.id)
-    logger.info(f"Admin {update.effective_user.id} simulated Crypto signal.")
-
-async def stocks_command(update: Update, context):
-    if not is_admin(update.effective_user.id):
-        await update.message.reply_text("You are not authorized to use this command.")
-        return
-    signal_data = {
-        "symbol": "AAPL", "direction": "BUY", "timeframe": "Daily", "market": "stocks",
-        "entry_price": "170", "stop_loss": "165", "take_profit": "178",
-        "description": "Upcoming earnings report looks positive. Breakout from resistance.",
-        ""
-    }
-    await send_simulated_signal(signal_data, update.effective_chat.id)
-    logger.info(f"Admin {update.effective_user.id} simulated Stocks signal.")
-
-async def memecoins_command(update: Update, context):
-    if not is_admin(update.effective_user.id):
-        await update.message.reply_text("You are not authorized to use this command.")
-        return
-    signal_data = {
-        "symbol": "DOGE/USDT", "direction": "BUY", "timeframe": "30min", "market": "memecoins",
-        "entry_price": "0.15", "stop_loss": "0.14", "take_profit": "0.18",
-        "description": "Elon Musk tweet incoming. Very volatile asset.",
-        "liquidity": False, "order_block": False, "fvg": False # Meme coins often lack ICT concepts
-    }
-    await send_simulated_signal(signal_data, update.effective_chat.id)
-    logger.info(f"Admin {update.effective_user.id} simulated Memecoins signal.")
-
-async def polymarket_command(update: Update, context):
-    if not is_admin(update.effective_user.id):
-        await update.message.reply_text("You are not authorized to use this command.")
-        return
-    signal_data = {
-        "symbol": "ETH Price > $4000 by July 1", "direction": "YES", "timeframe": "N/A", "market": "polymarket",
-        "entry_price": "0.65", "stop_loss": "N/A", "take_profit": "0.90",
-        "description": "High probability event predicted by on-chain analysis.",
-        "liquidity": True, "order_block": False, "fvg": False
-    }
-    await send_simulated_signal(signal_data, update.effective_chat.id)
-    logger.info(f"Admin {update.effective_user.id} simulated Polymarket signal.")
-
-async def send_simulated_signal(signal_data, target_chat_id):
-    if not should_send_signal_based_on_filters(signal_data):
-        return "Signal filtered out by bot settings."
-
-    halal_status_text = ""
-    if signal_data["market"].lower() in ["crypto", "memecoins"]:
-        halal_status_text = "🟢 Halal" if is_coin_halal(signal_data["symbol"], signal_data["description"]) else "🔴 Haram"
-
-    message = (
-        f"🚨 New {signal_data['market'].upper()} Signal\n"
-        f"Pair: {signal_data['symbol']}\n"
-        f"Timeframe: {signal_data['timeframe']}\n"
-        f"Direction: {signal_data['direction']}\n"
-        f"Entry: {signal_data['entry_price']}\n"
-        f"TP: {signal_data['take_profit']}\nSL: {signal_data['stop_loss']}\n"
-        f"{halal_status_text}"
+    """
+    return (
+        signal.get("market") == "forex" and
+        signal.get("order_block") is True and
+        signal.get("fvg") is True and
+        signal.get("liquidity") == "grabbed"
     )
 
+def should_send_signal_based_on_ict_filter(signal: dict) -> bool:
+    if ict_filter_enabled and signal.get("market") == "forex":
+        return is_ict_compliant(signal)
+    return True # send others like crypto/stocks/etc.
+
+async def send_voice_alert(text: str, context: ContextTypes.DEFAULT_TYPE, chat_id: int):
+    try:
+        await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.RECORD_AUDIO)
+        tts = gTTS(text=text, lang='en')
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_file:
+            tts.save(tmp_file.name)
+        with open(tmp_file.name, "rb") as audio:
+            await context.bot.send_voice(chat_id=chat_id, voice=audio)
+        os.remove(tmp_file.name) # Clean up the temporary file
+    except Exception as e:
+        logger.error(f"Voice Alert Error: {e}")
+
+async def send_result_voice(status: str, context: ContextTypes.DEFAULT_TYPE, chat_id: int):
+    try:
+        await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.RECORD_AUDIO)
+        text = get_voice_text(status)
+        tts = gTTS(text=text, lang='en')
+        with tempfile.NamedTemporaryFile(delete=True, suffix=".mp3") as tmp:
+            tts.save(tmp.name)
+            with open(tmp.name, "rb") as audio_file:
+                await context.bot.send_voice(chat_id=chat_id, voice=audio_file)
+    except Exception as e:
+        logger.error(f"[Voice Alert Error]: {e}")
+
+async def send_memecoin_signal(context: ContextTypes.DEFAULT_TYPE, coin_data: dict):
+    name = coin_data.get("name", "Unknown")
+    address = coin_data.get("address", "N/A")
+    chain = coin_data.get("chain", "Solana")
+    reason = coin_data.get("reason", " 🚀  Social spike")
+    chart_url = coin_data.get("chart", "https://dexscreener.com/")
+
+    # Halal filter check
+    if halal_only_mode and not is_coin_halal_advanced(name):
+        logger.info(f" 🔴 Skipped haram coin (Halal Only Mode ON): {name}")
+        return
+
+    status_text = " 🟢  Halal" if is_coin_halal_advanced(name) else " 🔴  Haram"
+    msg = (
+        f" 🚨  *New Memecoin Detected!*\n\n"
+        f" 💎  *{name}*\n"
+        f" 🔗  Chain: {chain}\n"
+        f" 🪙  Address: `{address}`\n"
+        f" 📈  Reason: {reason}\n"
+        f" 🔍  Status: {status_text}\n"
+        f" 📊  Chart: {chart_url}"
+    )
     buttons = [[
-        InlineKeyboardButton("✅ Confirm", callback_data=f"CONFIRM:{signal_data['symbol']}:{signal_data['direction']}"),
-        InlineKeyboardButton("❌ Ignore", callback_data="IGNORE")
+        InlineKeyboardButton(" 📈  View Chart", url=chart_url),
+        InlineKeyboardButton(" 📥  Copy Address", callback_data=f"copy:{address}")
     ]]
     reply_markup = InlineKeyboardMarkup(buttons)
-
-    if target_chat_id:
-        await app.bot.send_message(chat_id=target_chat_id, text=message, reply_markup=reply_markup)
-        await send_voice_alert(get_voice_text("signal"), app.bot, target_chat_id)
-    else:
-        logger.error("Target CHAT_ID not provided for simulated signal.")
-
-# --- Callback Query Handler ---
-async def handle_callback_query(update: Update, context):
-    query = update.callback_query
-    user_id = query.from_user.id
-
-    # Always answer the callback query to remove the loading state on the button
-    await query.answer()
-
-    data = query.data
-
-    if data.startswith("TOGGLE_MARKET:"):
-        market = data.split(":")[1]
-        if user_id not in user_market_visibility:
-            user_market_visibility[user_id] = {
-                "forex": True, "crypto": True, "stocks": True, "memecoins": True, "polymarket": True
-            }
-        
-        current_settings = user_market_visibility[user_id]
-        if market in current_settings:
-            current_settings[market] = not current_settings[market]
-            status = "visible" if current_settings[market] else "hidden"
-            await query.edit_message_text(f"{market.capitalize()} signals are now {status}.")
-            logger.info(f"User {user_id} toggled {market} visibility to {status} via inline button.")
-        else:
-            await query.edit_message_text(f"Invalid market: {market}.")
-    elif data.startswith("CONFIRM:"):
-        _, symbol, direction = data.split(":")
-        await query.edit_message_text(f"You confirmed {direction} for {symbol}. (Action recorded)")
-        logger.info(f"User {user_id} confirmed trade: {direction} {symbol}.")
-        # Here you would integrate with an actual trading API to execute the trade
-    elif data == "IGNORE":
-        await query.edit_message_text("Signal ignored.")
-        logger.info(f"User {user_id} ignored signal.")
-
-# --- APScheduler for Daily Report ---
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from datetime import datetime
-scheduler = AsyncIOScheduler()
-
-async def send_daily_report():
-    if not CHAT_ID:
-        logger.warning("CHAT_ID not set for daily report. Skipping.")
-        return
-
-    report_text = "Daily Trading Report:\n\n"
-    today = datetime.now().strftime("%Y-%m-%d")
-
-    # This report combines all admin users' profits for simplicity, or can be individualized
-    # For individual reports, you'd iterate through ADMIN_IDS or all user_data keys
-    total_today_profit = 0.0
-    for user_id in ADMIN_IDS: # Or iterate user_data.keys() if you want report for all
-        if user_id in user_data and 'daily_profits' in user_data[user_id] and today in user_data[user_id]['daily_profits']:
-            total_today_profit += user_data[user_id]['daily_profits'][today]
-    
-    report_text += f"Total Profit Today ({today}): ${total_today_profit:.2f}\n"
-    report_text += "More detailed breakdown can be added here."
-
-    await app.bot.send_message(chat_id=CHAT_ID, text=report_text)
-    logger.info(f"Daily report sent to {CHAT_ID}. Total profit today: ${total_today_profit}")
-
-# Schedule the daily report to run every day at a specific time (e.g., 23:59 local time)
-# Note: Render instances might use UTC, adjust time accordingly.
-# Adding job tentatively -- it will be properly scheduled when the scheduler starts
-scheduler.add_job(send_daily_report, 'cron', hour=23, minute=59, id='daily_report_job', replace_job=True)
-scheduler.start()
+    await context.bot.send_message(chat_id=CHAT_ID, text=msg, reply_markup=reply_markup, parse_mode="Markdown")
 
 
-# --- Main Execution for Webhook Mode ---
-# This part is crucial for making Flask and PTB work together with Uvicorn.
-async def set_telegram_webhook():
-    """Sets the Telegram webhook when the application starts."""
-    WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-    if not WEBHOOK_URL:
-        logger.error("WEBHOOK_URL environment variable is not set. Webhook will not be set.")
-        raise ValueError("WEBHOOK_URL environment variable must be set for webhook deployment.")
-    else:
-        full_webhook_url = f"{WEBHOOK_URL}/telegram-webhook"
-        logger.info(f"Setting webhook to: {full_webhook_url}")
-
-        # Initialize the application
-        await app.initialize()
-
-        # Start the updater which will process updates put into the queue by the Flask webhook handler
-        await app.updater.start()
-
-        # Set the webhook on Telegram's side
-        await app.bot.set_webhook(url=full_webhook_url, allowed_updates=Update.ALL_TYPES)
-        logger.info("Telegram webhook set successfully.")
-
-# This function adds all handlers. It must be called after 'app' is created.
-def setup_handlers():
+# --- Telegram Bot Handler Registration ---
+def register_handlers():
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("profit", log_profit_command))
-    app.add_handler(CommandHandler("profits", show_profits_command))
-    app.add_handler(CommandHandler("forex", send_forex_trade_command))
+    app.add_handler(CommandHandler("profit", add_profit)) # Renamed from log_profit for consistency with Word doc
+    app.add_handler(CommandHandler("profits", show_profits)) # Renamed from view_profits
+    app.add_handler(CommandHandler("forex", send_forex_trade))
     app.add_handler(CommandHandler("autotrade", toggle_autotrade))
-    app.add_handler(CommandHandler("halalonly", toggle_halal_only_command))
-    app.add_handler(CommandHandler("withdraw_eth", withdraw_eth_command))
-    app.add_handler(CommandHandler("report", send_report_command))
-    app.add_handler(CommandHandler("marketvisibility", toggle_market_visibility_command))
+    app.add_handler(CommandHandler("halalonly", toggle_halal_only))
+    app.add_handler(CommandHandler("withdraw_eth", withdraw_eth))
+    app.add_handler(CommandHandler("report", send_report))
+    app.add_handler(CommandHandler("goal", goal_status))
+    app.add_handler(CommandHandler("addprofit", add_profit_to_goal)) # This is for goal tracking
+    app.add_handler(CommandHandler("ictfilter", toggle_ict_filter))
     app.add_handler(CommandHandler("search", search_command))
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_search_query))
-    app.add_handler(CommandHandler("ictfilter", toggle_ict_filter_command))
-    app.add_handler(CommandHandler("goal", goal_status_command))
-    app.add_handler(CommandHandler("addprofit", add_profit_goal_command))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search_query))
+    app.add_handler(CommandHandler("togglemarkets", toggle_market_visibility))
+    app.add_handler(CallbackQueryHandler(handle_toggle_market_callback, pattern="^TOGGLE_MARKET:"))
+    # Add other handlers as needed (e.g., for crypto, stocks, polymarket, memecoins if they have commands)
 
-    app.add_handler(CommandHandler("crypto", crypto_command))
-    app.add_handler(CommandHandler("stocks", stocks_command))
-    app.add_handler(CommandHandler("memecoins", memecoins_command))
-    app.add_handler(CommandHandler("polymarket", polymarket_command))
+    # Callback query for general confirmations (e.g., FOREX_CONFIRM, IGNORE)
+    async def handle_confirmation_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        query = update.callback_query
+        await query.answer()
+        data = query.data
+        if data.startswith("CONFIRM:"):
+            # Example: CONFIRM:EURUSD:BUY
+            _, symbol, direction = data.split(':')
+            await query.edit_message_text(f" ✅  Confirmed trade for {symbol} ({direction}).")
+            # Log this trade for report
+            trade_log.append({"symbol": symbol, "direction": direction, "timeframe": "N/A", "result": "Confirmed", "pnl": 0})
+            push_trade_to_notion(symbol, direction, "N/A", "Confirmed", 0) # Push to Notion
+            await send_result_voice("TP", context, query.message.chat_id) # Example voice alert
+        elif data == "IGNORE":
+            await query.edit_message_text(" ❌  Trade ignored.")
+        elif data.startswith("copy:"):
+            _, address_to_copy = data.split(':')
+            await query.answer(text=f"Address copied: {address_to_copy}", show_alert=True)
+            # Cannot directly copy to user's clipboard via Telegram bot, this is just a confirmation.
+        elif data == "FOREX_CONFIRM":
+            await query.edit_message_text(" ✅  Forex trade confirmed.")
+        elif data == "FOREX_IGNORE":
+            await query.edit_message_text(" ❌  Forex trade ignored.")
 
-    app.add_handler(CallbackQueryHandler(handle_callback_query))
+    app.add_handler(CallbackQueryHandler(handle_confirmation_callback))
 
+# --- Flask Routes (for Webhooks) ---
 
-# Ensure handlers are set up when the module is imported (e.g., by uvicorn)
-setup_handlers()
+@flask_app.route('/')
+def home():
+    return " ✅  Hussein7 TradeBot is live!"
 
-# Set up Web3 connection immediately (it's not async)
-if INFURA_URL:
+@flask_app.route('/telegram-webhook', methods=["POST"])
+async def telegram_webhook():
+    update_json = request.get_json(force=True)
     try:
-        w3 = Web3(Web3.HTTPProvider(INFURA_URL))
-        if not w3.is_connected():
-            logger.warning("Failed to connect to Infura. ETH withdrawal might not work.")
+        update = Update.de_json(update_json, app.bot)
+        await app.process_update(update)
+        return "OK"
     except Exception as e:
-        logger.error(f"Error connecting to Web3: {e}")
+        logger.error(f"Webhook Error: {str(e)}")
+        return f"ERROR: {str(e)}"
 
-# This is the main entry point when running with `uvicorn main:flask_app`
-# We use a special function to set the webhook, which will be called before the app starts
-@flask_app.before_first_request
-async def before_first_request_func():
-    """This runs once before the first request, ensuring webhook is set."""
-    await set_telegram_webhook()
+@flask_app.route('/signal-webhook', methods=['POST'])
+async def signal_webhook():
+    try:
+        data = request.get_json()
+        symbol = data.get("symbol", "Unknown")
+        direction = data.get("direction", "BUY")
+        timeframe = data.get("timeframe", "5min")
+        market = data.get("market", "forex")
+        sl = data.get("stop_loss", "N/A")
+        tp = data.get("take_profit", "N/A")
+        pnl = data.get("pnl", 0) # Assume pnl is provided for logging
+        trade_result = data.get("result", "N/A") # "WIN", "LOSS", "N/A"
 
-# If you run this file directly for local testing (not recommended for production on Render)
+        # Apply ICT filter for forex signals if enabled
+        if not should_send_signal_based_on_ict_filter(data):
+            logger.info(f" 📵 Skipped {symbol} signal – Not ICT compliant or ICT filter enabled for Forex.")
+            return "Skipped: Not ICT compliant"
+
+        # Halal status for crypto (using the advanced function)
+        halal_status = ""
+        if market.lower() == "crypto" or market.lower() == "memecoins":
+            halal_status = " 🟢  Halal" if is_coin_halal_advanced(symbol, data.get("description", "")) else " 🔴  Haram"
+            if halal_only_mode and "haram" in halal_status.lower():
+                logger.info(f" 🔴 Skipped haram coin (Halal Only Mode ON): {symbol}")
+                return "Skipped: Haram coin in Halal Only Mode"
+
+        # Construct message
+        message = (
+            f" 🚨  New {market.upper()} Signal\n"
+            f"Pair: {symbol}\n"
+            f"Timeframe: {timeframe}\n"
+            f"Direction: {direction}\n"
+            f"TP: {tp}\nSL: {sl}\n"
+            f"{halal_status}"
+        )
+        # Buttons for confirmation
+        buttons = [[
+            InlineKeyboardButton(" ✅  Confirm", callback_data=f"CONFIRM:{symbol}:{direction}"),
+            InlineKeyboardButton(" ❌  Ignore", callback_data="IGNORE")
+        ]]
+        reply_markup = InlineKeyboardMarkup(buttons)
+
+        # Send message to Telegram chat
+        await app.bot.send_message(chat_id=CHAT_ID, text=message, reply_markup=reply_markup, parse_mode="Markdown")
+
+        # Log trade and push to Notion
+        trade_log.append({
+            "symbol": symbol,
+            "direction": direction,
+            "timeframe": timeframe,
+            "result": trade_result,
+            "pnl": pnl
+        })
+        push_trade_to_notion(symbol, direction, timeframe, trade_result, pnl)
+        send_push_notification(f"New {market.upper()} Signal: {symbol} {direction}")
+
+        # Voice alert for specific conditions (e.g., TP/SL)
+        if trade_result == "WIN":
+            await send_result_voice("TP", app.bot, CHAT_ID)
+        elif trade_result == "LOSS":
+            await send_result_voice("SL", app.bot, CHAT_ID)
+
+        return " ✅  Signal sent to Telegram"
+    except Exception as e:
+        logger.error(f" ❌  Webhook error: {str(e)}")
+        return f" ❌  Webhook error: {str(e)}"
+
+# --- Scheduled Jobs ---
+scheduler = BackgroundScheduler()
+
+def daily_report_job_func():
+    if trade_log:
+        path = generate_daily_report(trade_log)
+        # Assuming app is running and can send document via bot
+        # This part requires the app.bot context which might not be available directly in a background job
+        # For simplicity, we just generate the report here. Sending should be handled by an async context.
+        # Alternatively, the bot can check a folder for new reports and send them.
+        logger.info(f"Daily report generated: {path}")
+
+# Schedule the daily report job
+scheduler.add_job(daily_report_job_func, "cron", hour=23, minute=59)
+
+# --- Main Execution ---
+async def setup_bot_webhook():
+    """Sets up the Telegram bot webhook."""
+    if WEBHOOK_URL and TELEGRAM_TOKEN:
+        webhook_url_full = f"{WEBHOOK_URL}/telegram-webhook"
+        logger.info(f"Setting webhook to {webhook_url_full}")
+        await app.bot.set_webhook(url=webhook_url_full)
+        logger.info("Telegram webhook set successfully.")
+    else:
+        logger.warning("WEBHOOK_URL or TELEGRAM_TOKEN not set. Webhook not configured.")
+
+    # Start polling for local development if webhook is not set
+    # This block is typically for local development when not using webhooks
+    # For production with uvicorn and webhooks, this would not be needed.
+    # if not WEBHOOK_URL:
+    #     logger.info("Starting Telegram bot polling...")
+    #     await app.run_polling()
+
 if __name__ == "__main__":
-    # For local testing, you might want to manually run the webhook setup
-    # and then run Flask. However, for a robust production setup with Render,
-    # you typically rely on `uvicorn main:flask_app` where `main` is your file
-    # and `flask_app` is the Flask instance.
+    register_handlers()
+    scheduler.start() # Start the scheduler
 
-    # To ensure the webhook setup runs once before Flask serves requests,
-    # and to properly handle the asyncio loop, the Uvicorn approach is best.
+    # For development on Render or local testing with uvicorn:
+    # The `uvicorn main:flask_app` command will handle running Flask
+    # and the /telegram-webhook endpoint will process updates.
+    # The webhook setup should run once when the app starts.
 
-    # If you MUST run this file directly (e.g., for simple local debug):
-    # This simulates `uvicorn main:flask_app` by running the Flask app
-    # and ensuring the webhook is set up.
-    
-    # Run the setup for Telegram bot in the same event loop as Flask
-    # Note: Flask's default run() is blocking and does not natively integrate
-    # with existing asyncio event loops easily.
-    # The `uvicorn` solution for `main:flask_app` is the robust way.
+    # We need to run the webhook setup as an async task
+    # A common pattern for Flask + Async bot is to use Flask's before_first_request
+    # or handle it during app startup if using a server like Gunicorn/Uvicorn
+    # For simplicity here, we'll ensure webhook is set.
 
-    # If you remove the `before_first_request_func` and try to run asyncio.run()
-    # here, it will conflict with Flask's internal event loop management.
+    # This part needs to be run inside an asyncio event loop, but flask_app.run() is blocking.
+    # This is why uvicorn is recommended to manage the event loop.
 
-    # For development on Render: The `uvicorn main:flask_app` command will handle this.
-    # The `before_first_request` decorator ensures `set_telegram_webhook` is called.
+    # If running with `uvicorn main:flask_app --host 0.0.0.0 --port $PORT`:
+    # Uvicorn will manage the event loop for both Flask and the async Telegram handlers.
+    # The webhook needs to be set once. A common way is to set it on the first request or on app startup.
 
-    # For local testing without uvicorn:
-    # You might temporarily uncomment something like this, but be aware of blocking issues:
-    # asyncio.run(set_telegram_webhook())
-    # PORT = int(os.getenv("PORT", 10000))
-    # logger.info(f"Starting Flask app on 0.0.0.0:{PORT}")
-    # flask_app.run(host="0.0.0.0", port=PORT, debug=True) # debug=True for local, False for prod
+    # We'll use a simple approach for local testing here.
+    # For production (Render), `uvicorn` will handle running `flask_app` directly.
+    # The webhook setup needs to happen outside the main flask_app.run() blocking call.
 
+    # To ensure webhook is set when the application starts with Uvicorn, you might
+    # need to have a startup event in your main application or a separate script.
+    # Here, we'll define a simple startup hook for Flask that runs the webhook setup.
+    # In a real Uvicorn deployment, this would be part of your ASGI app startup.
 
-    # The most robust way for local testing and production is to use uvicorn:
-    # Example command to run: uvicorn main:flask_app --host 0.0.0.0 --port 10000 --reload
-    # In Render, your "Start Command" will be: uvicorn main:flask_app --host 0.0.0.0 --port $PORT
-    
-    # This block is mostly for explaining the uvicorn setup.
-    # You generally don't run flask_app.run() when deploying with uvicorn.
-    # Render's "Start Command" should be `uvicorn main:flask_app --host 0.0.0.0 --port $PORT`
-    pass
+    @flask_app.before_first_request
+    def set_webhook_on_startup():
+        logger.info("Running before_first_request to set Telegram webhook...")
+        # Running async function in a sync context (Flask's before_first_request)
+        # This is generally not ideal, but often done for webhook setup.
+        # For production, consider using `gunicorn --worker-class uvicorn.workers.UvicornWorker main:flask_app`
+        # and handle startup in `main (3).py`'s original structure.
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(setup_bot_webhook())
+            else:
+                loop.run_until_complete(setup_bot_webhook())
+        except RuntimeError: # Occurs if no event loop is running (e.g., when not run with uvicorn directly)
+            asyncio.run(setup_bot_webhook())
+        logger.info("Webhook setup initiation attempted.")
+
+    logger.info(f"Starting Flask app with uvicorn (or locally via flask_app.run())...")
+    # This line is for local debugging/running directly as a script
+    # For production, your start command will be `uvicorn main:flask_app --host 0.0.0.0 --port $PORT`
+    PORT = int(os.getenv("PORT", 10000))
+    flask_app.run(host="0.0.0.0", port=PORT, debug=True) # debug=True for local, False for prod
