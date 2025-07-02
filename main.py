@@ -107,4 +107,5 @@ async def on_startup(app_instance):
 
 if __name__ == "__main__":
     import uvicorn
+    asyncio.run(initialize_bot())  # ✅ Run before server starts
     uvicorn.run(asgi_app, host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
