@@ -99,6 +99,9 @@ async def send_forex_pro_signals(context: ContextTypes.DEFAULT_TYPE = None):
 # === Webhook Endpoint ===
 @flask_app.route("/")
 def home():
+    if not hasattr(flask_app, "webhook_set"):
+        flask_app.webhook_set = True
+        asyncio.ensure_future(initialize_bot())  # async run for webhook
     return "✅ Hussein7 Bot is Live!"
 
 @flask_app.route("/telegram-webhook", methods=["POST"])
@@ -107,14 +110,9 @@ async def telegram_webhook():
     await app.process_update(update)
     return "OK"
 
-# === Setup Webhook & Scheduler on Start ===
-@flask_app.before_first_request
-def startup():
-    asyncio.run(initialize_bot())
-
 async def initialize_bot():
     await app.bot.set_webhook(url=f"{WEBHOOK_URL}/telegram-webhook")
-    app.job_queue.run_repeating(send_forex_pro_signals, interval=14400, first=10)  # every 4 hours
+    app.job_queue.run_repeating(send_forex_pro_signals, interval=14400, first=10)
 
 # === Run with Uvicorn (Render) ===
 if __name__ == "__main__":
