@@ -5,27 +5,23 @@ import requests
 import tempfile
 from decimal import Decimal
 from flask import Flask, request
-
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    ContextTypes
-)
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from gtts import gTTS
 from asgiref.wsgi import WsgiToAsgi
 
-# === Flask App for Render ===
+# === Flask App ===
 flask_app = Flask(__name__)
+asgi_app = WsgiToAsgi(flask_app)
 
-# === Bot Settings ===
+# === Settings ===
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://your-app-name.onrender.com")
 CHAT_ID = int(os.getenv("CHAT_ID", "123456789"))
 ACCOUNT_BALANCE = Decimal(os.getenv("ACCOUNT_BALANCE", "5000"))
 DAILY_MAX_RISK = Decimal(os.getenv("DAILY_MAX_RISK", "250"))
 
-# === Bot Application ===
+# === Telegram Bot App ===
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
 # === Lot Size Calculator ===
@@ -37,8 +33,8 @@ def calculate_lot_size(sl_pips: float, pip_value: float = 10.0) -> float:
 
 # === Chart Image Generator ===
 def generate_chart_image(pair: str, direction: str) -> bytes:
-    chart_url = f"https://quickchart.io/chart?c={{type:'line',data:{{labels:['T1','T2','T3'],datasets:[{{label:'{pair}',data:[1.0,1.1,1.2]}}]}}}}"
-    response = requests.get(chart_url)
+    url = f"https://quickchart.io/chart?c={{type:'line',data:{{labels:['T1','T2','T3'],datasets:[{{label:'{pair}',data:[1.0,1.1,1.2]}}]}}}}"
+    response = requests.get(url)
     return response.content if response.status_code == 200 else None
 
 # === Voice Alert ===
@@ -50,7 +46,7 @@ async def send_voice(text: str, context: ContextTypes.DEFAULT_TYPE, chat_id: int
         await context.bot.send_voice(chat_id=chat_id, voice=audio)
     os.remove(tmp.name)
 
-# === Signal Sender ===
+# === Forex/Crypto Signals ===
 async def send_forex_pro_signals(context: ContextTypes.DEFAULT_TYPE = None):
     signals = [
         {"pair": "EURUSD", "dir": "BUY", "entry": 1.0950, "tp": 1.1000, "sl": 1.0910},
@@ -64,64 +60,53 @@ async def send_forex_pro_signals(context: ContextTypes.DEFAULT_TYPE = None):
         {"pair": "ETHUSD", "dir": "BUY", "entry": 3400, "tp": 3550, "sl": 3320},
         {"pair": "XRPUSD", "dir": "SELL", "entry": 0.48, "tp": 0.45, "sl": 0.50}
     ]
-
     bot = context.bot if context else app.bot
 
-    for signal in signals:
-        pair = signal["pair"]
-        direction = signal["dir"]
-        entry = signal["entry"]
-        tp = signal["tp"]
-        sl = signal["sl"]
-        sl_pips = abs(entry - sl) * 100 if isinstance(entry, float) else abs(entry - sl)
+    for s in signals:
+        sl_pips = abs(s["entry"] - s["sl"]) * 100 if isinstance(s["entry"], float) else abs(s["entry"] - s["sl"])
         lot_size = calculate_lot_size(sl_pips)
-        chart_img = generate_chart_image(pair, direction)
-
+        chart = generate_chart_image(s["pair"], s["dir"])
         msg = (
-            f"📊 *{pair} Signal*\n"
-            f"Direction: {direction}\n"
-            f"Entry: {entry}\n"
-            f"TP: {tp}\n"
-            f"SL: {sl}\n"
+            f"📊 *{s['pair']} Signal*\n"
+            f"Direction: {s['dir']}\n"
+            f"Entry: {s['entry']}\n"
+            f"TP: {s['tp']}\n"
+            f"SL: {s['sl']}\n"
             f"📏 Lot Size: {lot_size} lots\n"
             f"🕒 Auto-close in 5 mins"
         )
-
-        buttons = [[InlineKeyboardButton("✅ Confirm", callback_data=f"CONFIRM:{pair}:{direction}:{lot_size}")]]
+        buttons = [[InlineKeyboardButton("✅ Confirm", callback_data=f"CONFIRM:{s['pair']}:{s['dir']}:{lot_size}")]]
         markup = InlineKeyboardMarkup(buttons)
-
-        if chart_img:
-            await bot.send_photo(chat_id=CHAT_ID, photo=chart_img, caption=msg, reply_markup=markup, parse_mode="Markdown")
+        if chart:
+            await bot.send_photo(chat_id=CHAT_ID, photo=chart, caption=msg, reply_markup=markup, parse_mode="Markdown")
         else:
             await bot.send_message(chat_id=CHAT_ID, text=msg, reply_markup=markup, parse_mode="Markdown")
+        await send_voice(f"{s['pair']} signal: {s['dir']} now active.", context or app, CHAT_ID)
 
-        await send_voice(f"{pair} signal: {direction} now active.", context or app, CHAT_ID)
-
-# === Webhook & Signal Scheduler Init ===
-async def initialize_bot():
-    await app.bot.set_webhook(url=f"{WEBHOOK_URL}/telegram-webhook")
-    app.job_queue.run_repeating(send_forex_pro_signals, interval=14400, first=10)
-
-# === Routes ===
+# === Home Page ===
 @flask_app.route("/")
-def home():
-    if not hasattr(flask_app, "webhook_set"):
-        flask_app.webhook_set = True
-        try:
-            asyncio.run(initialize_bot())
-        except RuntimeError as e:
-            print(f"Webhook error: {e}")
+async def home():
     return "✅ Hussein7 Bot is Live!"
 
+# === Telegram Webhook ===
 @flask_app.route("/telegram-webhook", methods=["POST"])
 async def telegram_webhook():
     update = Update.de_json(request.get_json(force=True), app.bot)
+    await app.initialize()  # ✅ Fix for RuntimeError
     await app.process_update(update)
     return "OK"
 
-# === Render-ready ASGI Wrapper ===
-asgi_app = WsgiToAsgi(flask_app)
+# === Webhook Setup on Launch ===
+async def initialize_bot():
+    await app.initialize()
+    await app.bot.set_webhook(url=f"{WEBHOOK_URL}/telegram-webhook")
+    app.job_queue.run_repeating(send_forex_pro_signals, interval=14400, first=10)  # every 4 hrs
 
+@app.on_startup
+async def on_startup(app_instance):
+    await initialize_bot()
+
+# === Run with Uvicorn ===
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(asgi_app, host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
