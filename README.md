@@ -1,17 +1,16 @@
 # walalka ForexPro Bot
-
-A Telegram trading bot that sends PRO signals for:
-- 5 Forex pairs (EURUSD, GBPUSD, etc.)
-- BTC, ETH, XAU, XAG, XRP
-
-## Features
-- TP, SL, EN levels
-- Chart preview via quickchart
+ (Render Version)
+A 24/7 Telegram bot that sends Forex PRO signals with:
+- Entry, TP, SL
 - Lot size calculator
-- Voice alerts
-- Confirm/Ignore button interactions
+- Auto chart image
+- Voice alert
+- Every 4 hours (6x daily)
 
-## Usage
-Run locally:
+## Deployment (Render)
+1. Upload all files to GitHub
+2. Create new Render → Web Service
+3. Set Python Build & `requirements.txt`
+4. Use this Start Command:
 ```bash
-python main.py
+uvicorn main:flask_app --host 0.0.0.0 --port 10000
