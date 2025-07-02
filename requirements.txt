@@ -3,3 +3,4 @@ Flask
 gTTS
 requests
 uvicorn
+asgiref
