@@ -114,9 +114,11 @@ async def initialize_bot():
     await app.bot.set_webhook(url=f"{WEBHOOK_URL}/telegram-webhook")
     app.job_queue.run_repeating(send_forex_pro_signals, interval=14400, first=10)
 
-# === Run with Uvicorn (Render) ===
+from asgiref.wsgi import WsgiToAsgi
+
+asgi_app = WsgiToAsgi(flask_app)
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:flask_app", host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
-
+    uvicorn.run(asgi_app, host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
         
