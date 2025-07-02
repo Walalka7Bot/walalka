@@ -13,6 +13,7 @@ from telegram.ext import (
     ContextTypes
 )
 from gtts import gTTS
+from asgiref.wsgi import WsgiToAsgi
 
 # === Flask App for Render ===
 flask_app = Flask(__name__)
@@ -49,7 +50,7 @@ async def send_voice(text: str, context: ContextTypes.DEFAULT_TYPE, chat_id: int
         await context.bot.send_voice(chat_id=chat_id, voice=audio)
     os.remove(tmp.name)
 
-# === Signal Sender Function ===
+# === Signal Sender ===
 async def send_forex_pro_signals(context: ContextTypes.DEFAULT_TYPE = None):
     signals = [
         {"pair": "EURUSD", "dir": "BUY", "entry": 1.0950, "tp": 1.1000, "sl": 1.0910},
@@ -96,12 +97,20 @@ async def send_forex_pro_signals(context: ContextTypes.DEFAULT_TYPE = None):
 
         await send_voice(f"{pair} signal: {direction} now active.", context or app, CHAT_ID)
 
-# === Webhook Endpoint ===
+# === Webhook & Signal Scheduler Init ===
+async def initialize_bot():
+    await app.bot.set_webhook(url=f"{WEBHOOK_URL}/telegram-webhook")
+    app.job_queue.run_repeating(send_forex_pro_signals, interval=14400, first=10)
+
+# === Routes ===
 @flask_app.route("/")
 def home():
     if not hasattr(flask_app, "webhook_set"):
         flask_app.webhook_set = True
-        asyncio.ensure_future(initialize_bot())  # async run for webhook
+        try:
+            asyncio.run(initialize_bot())
+        except RuntimeError as e:
+            print(f"Webhook error: {e}")
     return "✅ Hussein7 Bot is Live!"
 
 @flask_app.route("/telegram-webhook", methods=["POST"])
@@ -110,12 +119,7 @@ async def telegram_webhook():
     await app.process_update(update)
     return "OK"
 
-async def initialize_bot():
-    await app.bot.set_webhook(url=f"{WEBHOOK_URL}/telegram-webhook")
-    app.job_queue.run_repeating(send_forex_pro_signals, interval=14400, first=10)
-
-from asgiref.wsgi import WsgiToAsgi
-
+# === Render-ready ASGI Wrapper ===
 asgi_app = WsgiToAsgi(flask_app)
 
 if __name__ == "__main__":
