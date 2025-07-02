@@ -1,5 +1,6 @@
-Flask
-gTTS
-python-telegram-bot
-asgiref
-uvicorn
+python-telegram-bot==20.3
+Flask==3.1.1
+gTTS==2.5.4
+requests==2.32.4
+asgiref==3.7.2
+uvicorn==0.35.0
