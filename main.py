@@ -95,7 +95,12 @@ async def telegram_webhook():
 async def initialize_bot():
     await app.initialize()
     await app.bot.set_webhook(url=f"{WEBHOOK_URL}/telegram-webhook")
-    app.job_queue.run_repeating(send_forex_pro_signals, interval=120, first=10)
+    
+    # Add this part
+    if app.job_queue:
+        app.job_queue.run_repeating(send_forex_pro_signals, interval=120, first=10)
+    else:
+        print("🚨 JobQueue not available. Install with [job-queue] extras.")
 
 if __name__ == "__main__":
     import uvicorn
