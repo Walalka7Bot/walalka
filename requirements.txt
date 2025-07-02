@@ -1,11 +1,5 @@
-Flask
-python-telegram-bot
-uvicorn # <-- Hubi in khadkani jiro!
-web3
+txt
+python-telegram-bot==20.3
 gTTS
-fpdf
-reportlab
-Pillow
-APScheduler
 requests
-python-dotenv
+Pillow
