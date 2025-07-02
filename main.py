@@ -46,67 +46,72 @@ async def send_voice(text: str, context: ContextTypes.DEFAULT_TYPE, chat_id: int
         await context.bot.send_voice(chat_id=chat_id, voice=audio)
     os.remove(tmp.name)
 
-# === Forex/Crypto Signals ===
-async def send_forex_pro_signals(context: ContextTypes.DEFAULT_TYPE = None):
-    signals = [
-        {"pair": "EURUSD", "dir": "BUY", "entry": 1.0950, "tp": 1.1000, "sl": 1.0910},
-        {"pair": "GBPUSD", "dir": "SELL", "entry": 1.2700, "tp": 1.2600, "sl": 1.2750},
-        {"pair": "USDJPY", "dir": "BUY", "entry": 157.80, "tp": 158.50, "sl": 157.30},
-        {"pair": "AUDUSD", "dir": "SELL", "entry": 0.6650, "tp": 0.6580, "sl": 0.6685},
-        {"pair": "USDCAD", "dir": "BUY", "entry": 1.3700, "tp": 1.3760, "sl": 1.3660},
-        {"pair": "BTCUSD", "dir": "BUY", "entry": 61000, "tp": 63000, "sl": 60000},
-        {"pair": "XAUUSD", "dir": "SELL", "entry": 2365, "tp": 2345, "sl": 2378},
-        {"pair": "XAGUSD", "dir": "BUY", "entry": 29.50, "tp": 30.20, "sl": 29.10},
-        {"pair": "ETHUSD", "dir": "BUY", "entry": 3400, "tp": 3550, "sl": 3320},
-        {"pair": "XRPUSD", "dir": "SELL", "entry": 0.48, "tp": 0.45, "sl": 0.50}
-    ]
-    bot = context.bot if context else app.bot
+# === Signals List ===
+signals = [
+    {"pair": "EURUSD", "dir": "BUY", "entry": 1.0950, "tp": 1.1000, "sl": 1.0910},
+    {"pair": "GBPUSD", "dir": "SELL", "entry": 1.2700, "tp": 1.2600, "sl": 1.2750},
+    {"pair": "USDJPY", "dir": "BUY", "entry": 157.80, "tp": 158.50, "sl": 157.30},
+    {"pair": "AUDUSD", "dir": "SELL", "entry": 0.6650, "tp": 0.6580, "sl": 0.6685},
+    {"pair": "USDCAD", "dir": "BUY", "entry": 1.3700, "tp": 1.3760, "sl": 1.3660},
+    {"pair": "BTCUSD", "dir": "BUY", "entry": 61000, "tp": 63000, "sl": 60000},
+    {"pair": "XAUUSD", "dir": "SELL", "entry": 2365, "tp": 2345, "sl": 2378},
+    {"pair": "XAGUSD", "dir": "BUY", "entry": 29.50, "tp": 30.20, "sl": 29.10},
+    {"pair": "ETHUSD", "dir": "BUY", "entry": 3400, "tp": 3550, "sl": 3320},
+    {"pair": "XRPUSD", "dir": "SELL", "entry": 0.48, "tp": 0.45, "sl": 0.50},
+    # 10 more for expansion below
+]
 
-    for s in signals:
-        sl_pips = abs(s["entry"] - s["sl"]) * 100 if isinstance(s["entry"], float) else abs(s["entry"] - s["sl"])
+# === Signal Sender ===
+async def send_forex_pro_signals(context: ContextTypes.DEFAULT_TYPE = None):
+    bot = context.bot if context else app.bot
+    for signal in signals:
+        sl_pips = abs(signal["entry"] - signal["sl"]) * 100 if isinstance(signal["entry"], float) else abs(signal["entry"] - signal["sl"])
         lot_size = calculate_lot_size(sl_pips)
-        chart = generate_chart_image(s["pair"], s["dir"])
+        chart = generate_chart_image(signal["pair"], signal["dir"])
         msg = (
-            f"📊 *{s['pair']} Signal*\n"
-            f"Direction: {s['dir']}\n"
-            f"Entry: {s['entry']}\n"
-            f"TP: {s['tp']}\n"
-            f"SL: {s['sl']}\n"
-            f"📏 Lot Size: {lot_size} lots\n"
-            f"🕒 Auto-close in 5 mins"
+            f"\ud83d\udcca *{signal['pair']} Signal*
+"
+            f"Direction: {signal['dir']}\n"
+            f"Entry: {signal['entry']}\n"
+            f"TP: {signal['tp']}\n"
+            f"SL: {signal['sl']}\n"
+            f"\ud83d\udccf Lot Size: {lot_size} lots\n"
+            f"\ud83d\udd52 Timeframe: 15M / 5M\n"
+            f"\ud83d\udd5b Auto-close in 5 mins"
         )
-        buttons = [[InlineKeyboardButton("✅ Confirm", callback_data=f"CONFIRM:{s['pair']}:{s['dir']}:{lot_size}")]]
+        buttons = [[InlineKeyboardButton("\u2705 Confirm", callback_data=f"CONFIRM:{signal['pair']}:{signal['dir']}:{lot_size}")]]
         markup = InlineKeyboardMarkup(buttons)
         if chart:
             await bot.send_photo(chat_id=CHAT_ID, photo=chart, caption=msg, reply_markup=markup, parse_mode="Markdown")
         else:
             await bot.send_message(chat_id=CHAT_ID, text=msg, reply_markup=markup, parse_mode="Markdown")
-        await send_voice(f"{s['pair']} signal: {s['dir']} now active.", context or app, CHAT_ID)
+        await send_voice(f"{signal['pair']} signal: {signal['dir']} now active.", context or app, CHAT_ID)
+        await asyncio.sleep(120)  # 2 mins between each signal
 
 # === Home Page ===
 @flask_app.route("/")
 async def home():
-    return "✅ Hussein7 Bot is Live!"
+    return "\u2705 Hussein7 Bot is Live!"
 
 # === Telegram Webhook ===
 @flask_app.route("/telegram-webhook", methods=["POST"])
 async def telegram_webhook():
     update = Update.de_json(request.get_json(force=True), app.bot)
-    await app.initialize()  # ✅ Fix for RuntimeError
+    await app.initialize()
     await app.process_update(update)
     return "OK"
 
-# === Webhook Setup on Launch ===
+# === Init & Webhook Setup ===
 async def initialize_bot():
     await app.initialize()
     await app.bot.set_webhook(url=f"{WEBHOOK_URL}/telegram-webhook")
-    app.job_queue.run_repeating(send_forex_pro_signals, interval=14400, first=10)  # every 4 hrs
+    app.job_queue.run_repeating(send_forex_pro_signals, interval=21600, first=10)  # every 6 hrs
 
 @app.on_startup
 async def on_startup(app_instance):
     await initialize_bot()
 
-# === Run with Uvicorn ===
+# === Uvicorn Launch ===
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(asgi_app, host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
