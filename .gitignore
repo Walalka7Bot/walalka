@@ -1,8 +1,7 @@
-__pycache__/
 .env
+__pycache__/
 *.pyc
 *.pyo
 *.pyd
 *.mp3
 *.log
-reports/
