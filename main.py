@@ -1,12 +1,8 @@
-import os
-import io
-import asyncio
-import requests
-import tempfile
+import os, io, asyncio, requests, tempfile
 from decimal import Decimal
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
+from telegram.ext import ApplicationBuilder, ContextTypes
 from gtts import gTTS
 from asgiref.wsgi import WsgiToAsgi
 
@@ -99,13 +95,9 @@ async def telegram_webhook():
 async def initialize_bot():
     await app.initialize()
     await app.bot.set_webhook(url=f"{WEBHOOK_URL}/telegram-webhook")
-    app.job_queue.run_repeating(send_forex_pro_signals, interval=120, first=5)  # 2 mins
-
-@app.on_startup
-async def on_startup(app_instance):
-    await initialize_bot()
+    app.job_queue.run_repeating(send_forex_pro_signals, interval=120, first=10)
 
 if __name__ == "__main__":
     import uvicorn
-    asyncio.run(initialize_bot())  # ✅ Run before server starts
+    asyncio.run(initialize_bot())  # ✅ run setup
     uvicorn.run(asgi_app, host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
