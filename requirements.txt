@@ -1,6 +1,5 @@
-python-telegram-bot==20.3
 Flask
 gTTS
-requests
-uvicorn
+python-telegram-bot
 asgiref
+uvicorn
