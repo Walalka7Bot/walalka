@@ -1,28 +1,8 @@
-# Ignore Python cache
 __pycache__/
-*.py[cod]
-*.so
-*.egg
-*.egg-info/
-dist/
-build/
-
-# Ignore virtual environments
-env/
-venv/
-ENV/
-.venv/
-
-# Ignore system files
-.DS_Store
-Thumbs.db
-
-# Ignore environment config
 .env
-wallets.json
-
-# Ignore logs
+*.pyc
+*.pyo
+*.pyd
+*.mp3
 *.log
-
-# Ignore Jupyter checkpoints
-.ipynb_checkpoints/
+reports/
