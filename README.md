@@ -1,16 +1,15 @@
-# walalka ForexPro Bot
- (Render Version)
-A 24/7 Telegram bot that sends Forex PRO signals with:
-- Entry, TP, SL
-- Lot size calculator
-- Auto chart image
-- Voice alert
-- Every 4 hours (6x daily)
+# walalkaTradebot 💹
 
-## Deployment (Render)
-1. Upload all files to GitHub
-2. Create new Render → Web Service
-3. Set Python Build & `requirements.txt`
-4. Use this Start Command:
-```bash
-uvicorn main:flask_app --host 0.0.0.0 --port 10000
+✅ Telegram bot kaasi oo kuu dira 20 signal forex, crypto, metals oo leh:
+- 85–95% accuracy
+- 15M / 5M Timeframe
+- Voice alerts
+- Chart image
+- Auto lot size
+- Auto-send every 2 mins
+- Webhook Render deployment
+
+## Deployment
+- Platform: Render.com
+- Port: 10000
+- Webhook URL: `https://walalka-2.onrender.com/telegram-webhook`
