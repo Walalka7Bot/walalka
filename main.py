@@ -18,7 +18,7 @@ ACCOUNT_BALANCE = Decimal(os.getenv("ACCOUNT_BALANCE", "5000"))
 DAILY_MAX_RISK = Decimal(os.getenv("DAILY_MAX_RISK", "250"))
 
 # Telegram Application
-app = Application.builder().token(TELEGRAM_TOKEN).build()
+app = Application.builder().token(TELEGRAM_TOKEN).post_init(False).build()
 
 # Lot Size Calculation
 def calculate_lot_size(sl_pips: float, pip_value: float = 10.0) -> float:
