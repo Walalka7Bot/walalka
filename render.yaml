@@ -2,6 +2,17 @@ services:
   - type: web
     name: hussein7-tradebot
     env: python
-    runtime: python-3.11
+    plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python main.py
+    startCommand: uvicorn main:asgi_app --host 0.0.0.0 --port 10000
+    envVars:
+      - key: TELEGRAM_TOKEN
+        sync: false
+      - key: CHAT_ID
+        sync: false
+      - key: WEBHOOK_URL
+        sync: false
+      - key: ACCOUNT_BALANCE
+        sync: false
+      - key: DAILY_MAX_RISK
+        sync: false
