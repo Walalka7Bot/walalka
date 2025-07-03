@@ -16,7 +16,7 @@ CHAT_ID = int(os.getenv("CHAT_ID", "123456789"))
 ACCOUNT_BALANCE = Decimal(os.getenv("ACCOUNT_BALANCE", "5000"))
 DAILY_MAX_RISK = Decimal(os.getenv("DAILY_MAX_RISK", "250"))
 
-app = ApplicationBuilder().token(TELEGRAM_TOKEN).build(job_queue=None)
+app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
 def calculate_lot_size(sl_pips: float, pip_value: float = 10.0) -> float:
     if sl_pips == 0:
