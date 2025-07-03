@@ -1,29 +1,11 @@
-# Python cache files
 __pycache__/
-*.py[cod]
-*.pyo
-
-# Environment files
 .env
-
-# VSCode settings
-.vscode/
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Log or temp files
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
 *.log
 *.tmp
-*.bak
-
-# Uvicorn logs if saved
-*.pid
-
-# Jupyter notebooks (if not needed)
-*.ipynb
-
-# Virtual environments
+*.mp3
 .venv/
-env/
