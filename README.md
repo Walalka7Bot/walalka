@@ -1,35 +1,24 @@
 # 🤖 walalka TradeBot
 
-walalka TradeBot waa Telegram AI bot casri ah oo si otomaatig ah u soo diro fursadaha ganacsi (Forex, Crypto, Stocks, Polymarket). Waxaa lagu dhisay Python + Flask + Telegram API.
+📊 Automated Forex & Crypto Signal Bot using Flask, Telegram API, and gTTS.
 
----
+### Features:
+- Signal broadcasting with charts
+- Auto lot size calculation
+- Voice alerts (gTTS)
+- Flask + Uvicorn server
+- Works perfectly with Render.com
 
-## 🚀 Features
+### Deploy on Render:
+1. Fork this repo
+2. Add your `.env` variables or Render environment keys:
+   - `TELEGRAM_TOKEN`
+   - `CHAT_ID`
+   - `WEBHOOK_URL`
+   - `ACCOUNT_BALANCE`
+   - `DAILY_MAX_RISK`
+3. Connect GitHub to Render
+4. Click "Deploy"
 
-- 📊 20+ Forex & Crypto signals maalin kasta
-- 📈 Auto lot size calculation (Risk: $250, Balance: $5000)
-- 🖼️ Chart image generation
-- 🎤 Voice alerts using gTTS
-- 🔘 Confirm button with callback
-- 🌐 Flask + Webhook integration
-- 📦 Manual signal command: `/signals`
+✅ Visit: `/` route → “Hussein7 Bot is Live!”
 
----
-
-## ⚙️ Tech Stack
-
-- Python `3.11.8`
-- Flask `3.1.1`
-- python-telegram-bot `20.6`
-- gTTS `2.5.4`
-- Uvicorn ASGI server
-
----
-
-## 🛠️ Setup Instructions
-
-1. **Clone Repository:**
-
-```bash
-git clone https://github.com/YourUsername/your-repo.git
-cd your-repo
