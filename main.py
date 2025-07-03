@@ -6,28 +6,34 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 from gtts import gTTS
 from asgiref.wsgi import WsgiToAsgi
 
+# Flask App + ASGI wrapper
 flask_app = Flask(__name__)
 asgi_app = WsgiToAsgi(flask_app)
 
+# ENV Vars
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 CHAT_ID = int(os.getenv("CHAT_ID", "123456789"))
 ACCOUNT_BALANCE = Decimal(os.getenv("ACCOUNT_BALANCE", "5000"))
 DAILY_MAX_RISK = Decimal(os.getenv("DAILY_MAX_RISK", "250"))
 
+# Telegram Application
 app = Application.builder().token(TELEGRAM_TOKEN).build()
 
+# Lot Size Calculation
 def calculate_lot_size(sl_pips: float, pip_value: float = 10.0) -> float:
     if sl_pips == 0:
         return 0.0
     lot = (DAILY_MAX_RISK / Decimal(str(sl_pips))) / Decimal(str(pip_value))
     return round(float(lot), 2)
 
+# Chart Image
 def generate_chart_image(pair: str, direction: str) -> bytes:
     url = f"https://quickchart.io/chart?c={{type:'line',data:{{labels:['T1','T2','T3'],datasets:[{{label:'{pair}',data:[1.0,1.1,1.2]}}]}}}}"
     response = requests.get(url)
     return response.content if response.status_code == 200 else None
 
+# Voice Alert
 async def send_voice(text: str, context: ContextTypes.DEFAULT_TYPE, chat_id: int):
     tts = gTTS(text=text, lang='en')
     with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
@@ -36,7 +42,8 @@ async def send_voice(text: str, context: ContextTypes.DEFAULT_TYPE, chat_id: int
         await context.bot.send_voice(chat_id=chat_id, voice=audio)
     os.remove(tmp.name)
 
-signals = [
+# Forex/Crypto/Index Signals
+signals = [  # (same list as before – kept unchanged)
     {"pair": "EURUSD", "dir": "BUY", "entry": 1.0950, "tp": 1.1000, "sl": 1.0910, "tf": "15M"},
     {"pair": "GBPUSD", "dir": "SELL", "entry": 1.2700, "tp": 1.2600, "sl": 1.2750, "tf": "5M"},
     {"pair": "USDJPY", "dir": "BUY", "entry": 157.80, "tp": 158.50, "sl": 157.30, "tf": "15M"},
@@ -59,6 +66,7 @@ signals = [
     {"pair": "EURCAD", "dir": "SELL", "entry": 1.4600, "tp": 1.4550, "sl": 1.4625, "tf": "5M"},
 ]
 
+# Signal Sender
 async def send_signals(context: ContextTypes.DEFAULT_TYPE = None):
     bot = context.bot if context else app.bot
     for s in signals:
@@ -82,20 +90,25 @@ async def send_signals(context: ContextTypes.DEFAULT_TYPE = None):
             await bot.send_message(chat_id=CHAT_ID, text=msg, reply_markup=markup, parse_mode="Markdown")
         await send_voice(f"{s['pair']} {s['tf']} signal {s['dir']} now active.", context or app, CHAT_ID)
 
+# Flask Home
 @flask_app.route("/")
 async def home(): return "✅ Hussein7 Bot is Live!"
 
+# Webhook Receiver
 @flask_app.route("/telegram-webhook", methods=["POST"])
 async def telegram_webhook():
     update = Update.de_json(request.get_json(force=True), app.bot)
     await app.process_update(update)
     return "OK"
 
+# Command Handler
 async def signals_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_signals(context)
 
+# Add Handler
 app.add_handler(CommandHandler("signals", signals_command))
 
+# Init and Run
 async def initialize_bot():
     await app.initialize()
     await app.bot.set_webhook(url=f"{WEBHOOK_URL}/telegram-webhook")
