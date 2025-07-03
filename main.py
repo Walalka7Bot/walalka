@@ -1,9 +1,8 @@
-# main.py (Version without JobQueue, with /signals command)
 import os, io, asyncio, requests, tempfile
 from decimal import Decimal
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
+from telegram.ext import Application, CommandHandler, ContextTypes
 from gtts import gTTS
 from asgiref.wsgi import WsgiToAsgi
 
@@ -16,13 +15,14 @@ CHAT_ID = int(os.getenv("CHAT_ID", "123456789"))
 ACCOUNT_BALANCE = Decimal(os.getenv("ACCOUNT_BALANCE", "5000"))
 DAILY_MAX_RISK = Decimal(os.getenv("DAILY_MAX_RISK", "250"))
 
-app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+app = Application.builder().token(TELEGRAM_TOKEN).build()
 
 def calculate_lot_size(sl_pips: float, pip_value: float = 10.0) -> float:
     if sl_pips == 0:
         return 0.0
-    lot = (DAILY_MAX_RISK / Decimal(str(sl_pips))) / Decimal(str(pip_value))
-    return round(float(lot), 2)
+    risk_per_trade = DAILY_MAX_RISK
+    lot = (risk_per_trade / sl_pips) / pip_value
+    return round(lot, 2)
 
 def generate_chart_image(pair: str, direction: str) -> bytes:
     url = f"https://quickchart.io/chart?c={{type:'line',data:{{labels:['T1','T2','T3'],datasets:[{{label:'{pair}',data:[1.0,1.1,1.2]}}]}}}}"
@@ -61,22 +61,22 @@ signals = [
     {"pair": "EURCAD", "dir": "SELL", "entry": 1.4600, "tp": 1.4550, "sl": 1.4625, "tf": "5M"},
 ]
 
-# Signal sender
 async def send_signals(context: ContextTypes.DEFAULT_TYPE = None):
     bot = context.bot if context else app.bot
     for s in signals:
-        sl_pips = abs(s["entry"] - s["sl"]) * 100
+        sl_pips = abs(s["entry"] - s["sl"]) * (100 if "JPY" in s["pair"] else 10000 if "XAU" in s["pair"] else 100)
         lot_size = calculate_lot_size(sl_pips)
         chart = generate_chart_image(s["pair"], s["dir"])
         msg = (
             f"📊 *{s['pair']} Signal*\n"
-            f"Timeframe: {s['tf']}\n"
-            f"Direction: {s['dir']}\n"
-            f"Entry: {s['entry']}\n"
-            f"TP: {s['tp']}\n"
-            f"SL: {s['sl']}\n"
-            f"📏 Lot Size: {lot_size} lots\n"
-            f"🕒 Auto-close in 5 mins"
+            f"🕓 Timeframe: {s['tf']}\n"
+            f"📈 Direction: {s['dir']}\n"
+            f"🎯 Entry: `{s['entry']}`\n"
+            f"🎯 TP: `{s['tp']}`\n"
+            f"🛑 SL: `{s['sl']}`\n"
+            f"📏 Risk: `{sl_pips:.1f} pips`\n"
+            f"📌 Lot Size: `{lot_size} lots`\n"
+            f"🔔 Auto-close in 5 mins"
         )
         markup = InlineKeyboardMarkup([[InlineKeyboardButton("✅ Confirm", callback_data=f"CONFIRM:{s['pair']}:{s['dir']}:{lot_size}")]])
         if chart:
@@ -91,11 +91,9 @@ async def home(): return "✅ Hussein7 Bot is Live!"
 @flask_app.route("/telegram-webhook", methods=["POST"])
 async def telegram_webhook():
     update = Update.de_json(request.get_json(force=True), app.bot)
-    await app.initialize()
     await app.process_update(update)
     return "OK"
 
-# /signals command
 async def signals_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_signals(context)
 
