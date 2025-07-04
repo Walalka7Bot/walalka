@@ -2,8 +2,8 @@ python-telegram-bot==20.3
 flask
 gTTS
 fpdf
-apscheduler
 pillow
+apscheduler
 web3
 eth-account
 python-dotenv
