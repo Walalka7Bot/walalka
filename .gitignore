@@ -1,11 +1,4 @@
-__pycache__/
 .env
+__pycache__/
 *.pyc
-*.pyo
-*.pyd
-*.db
-*.sqlite3
-*.log
-*.tmp
-*.mp3
-.venv/
+data/results.csv
