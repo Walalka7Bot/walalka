@@ -1,6 +1,9 @@
-flask==3.1.1
-python-telegram-bot==20.6
-gTTS==2.5.4
-requests==2.32.4
-asgiref==3.7.2
-uvicorn==0.35.0
+python-telegram-bot==20.3
+flask
+gTTS
+fpdf
+apscheduler
+pillow
+web3
+eth-account
+python-dotenv
