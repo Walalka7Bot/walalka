@@ -1,119 +1,423 @@
-import os, io, asyncio, requests, tempfile
-from decimal import Decimal
-from flask import Flask, request
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes
-from gtts import gTTS
-from asgiref.wsgi import WsgiToAsgi
+from telegram import Update, ReplyKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# Flask App + ASGI wrapper
-flask_app = Flask(__name__)
-asgi_app = WsgiToAsgi(flask_app)
+# BOT TOKEN (ku beddel token-kaaga gaarka ah)
+TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
 
-# ENV Vars
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-CHAT_ID = int(os.getenv("CHAT_ID", "123456789"))
-ACCOUNT_BALANCE = Decimal(os.getenv("ACCOUNT_BALANCE", "5000"))
-DAILY_MAX_RISK = Decimal(os.getenv("DAILY_MAX_RISK", "250"))
-
-# Telegram Application
-app = Application.builder().token(TELEGRAM_TOKEN).post_init(False).build()
-
-# Lot Size Calculation
-def calculate_lot_size(sl_pips: float, pip_value: float = 10.0) -> float:
-    if sl_pips == 0:
-        return 0.0
-    lot = (DAILY_MAX_RISK / Decimal(str(sl_pips))) / Decimal(str(pip_value))
-    return round(float(lot), 2)
-
-# Chart Image
-def generate_chart_image(pair: str, direction: str) -> bytes:
-    url = f"https://quickchart.io/chart?c={{type:'line',data:{{labels:['T1','T2','T3'],datasets:[{{label:'{pair}',data:[1.0,1.1,1.2]}}]}}}}"
-    response = requests.get(url)
-    return response.content if response.status_code == 200 else None
-
-# Voice Alert
-async def send_voice(text: str, context: ContextTypes.DEFAULT_TYPE, chat_id: int):
-    tts = gTTS(text=text, lang='en')
-    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
-        tts.save(tmp.name)
-    with open(tmp.name, "rb") as audio:
-        await context.bot.send_voice(chat_id=chat_id, voice=audio)
-    os.remove(tmp.name)
-
-# Forex/Crypto/Index Signals
-signals = [  # (same list as before – kept unchanged)
-    {"pair": "EURUSD", "dir": "BUY", "entry": 1.0950, "tp": 1.1000, "sl": 1.0910, "tf": "15M"},
-    {"pair": "GBPUSD", "dir": "SELL", "entry": 1.2700, "tp": 1.2600, "sl": 1.2750, "tf": "5M"},
-    {"pair": "USDJPY", "dir": "BUY", "entry": 157.80, "tp": 158.50, "sl": 157.30, "tf": "15M"},
-    {"pair": "AUDUSD", "dir": "SELL", "entry": 0.6650, "tp": 0.6580, "sl": 0.6685, "tf": "5M"},
-    {"pair": "USDCAD", "dir": "BUY", "entry": 1.3700, "tp": 1.3760, "sl": 1.3660, "tf": "15M"},
-    {"pair": "BTCUSD", "dir": "BUY", "entry": 61000, "tp": 63000, "sl": 60000, "tf": "5M"},
-    {"pair": "XAUUSD", "dir": "SELL", "entry": 2365, "tp": 2345, "sl": 2378, "tf": "15M"},
-    {"pair": "XAGUSD", "dir": "BUY", "entry": 29.50, "tp": 30.20, "sl": 29.10, "tf": "5M"},
-    {"pair": "ETHUSD", "dir": "BUY", "entry": 3400, "tp": 3550, "sl": 3320, "tf": "15M"},
-    {"pair": "XRPUSD", "dir": "SELL", "entry": 0.48, "tp": 0.45, "sl": 0.50, "tf": "5M"},
-    {"pair": "EURJPY", "dir": "SELL", "entry": 170.40, "tp": 169.90, "sl": 170.70, "tf": "5M"},
-    {"pair": "NZDUSD", "dir": "BUY", "entry": 0.6100, "tp": 0.6150, "sl": 0.6075, "tf": "15M"},
-    {"pair": "USOIL", "dir": "SELL", "entry": 82.00, "tp": 81.30, "sl": 82.50, "tf": "5M"},
-    {"pair": "NAS100", "dir": "BUY", "entry": 19400, "tp": 19600, "sl": 19200, "tf": "15M"},
-    {"pair": "USDCHF", "dir": "BUY", "entry": 0.8950, "tp": 0.8995, "sl": 0.8920, "tf": "5M"},
-    {"pair": "GOLD", "dir": "BUY", "entry": 2335, "tp": 2355, "sl": 2320, "tf": "5M"},
-    {"pair": "SOLUSD", "dir": "BUY", "entry": 142, "tp": 148, "sl": 139, "tf": "15M"},
-    {"pair": "ADAUSD", "dir": "SELL", "entry": 0.42, "tp": 0.40, "sl": 0.43, "tf": "5M"},
-    {"pair": "GBPNZD", "dir": "BUY", "entry": 2.0700, "tp": 2.0800, "sl": 2.0650, "tf": "15M"},
-    {"pair": "EURCAD", "dir": "SELL", "entry": 1.4600, "tp": 1.4550, "sl": 1.4625, "tf": "5M"},
+# Menu layout (Forex, Crypto, Metals)
+menu_buttons = [
+    ['📈 Get Signal', '📄 My Journal'],
+    ['💰 Upgrade to VIP', '🔕 Mute Voice Alerts'],
+    ['🪙 Crypto: BTC / ETH / SOL / XRP'],
+    ['📊 Forex: EURUSD / GBPUSD / USDJPY / AUDUSD / USDCAD'],
+    ['🥇 Metals: GOLD / SILVER']
 ]
 
-# Signal Sender
-async def send_signals(context: ContextTypes.DEFAULT_TYPE = None):
-    bot = context.bot if context else app.bot
-    for s in signals:
-        sl_pips = abs(s["entry"] - s["sl"]) * 100
-        lot_size = calculate_lot_size(sl_pips)
-        chart = generate_chart_image(s["pair"], s["dir"])
-        msg = (
-            f"📊 *{s['pair']} Signal*\n"
-            f"Timeframe: {s['tf']}\n"
-            f"Direction: {s['dir']}\n"
-            f"Entry: {s['entry']}\n"
-            f"TP: {s['tp']}\n"
-            f"SL: {s['sl']}\n"
-            f"📏 Lot Size: {lot_size} lots\n"
-            f"🕒 Auto-close in 5 mins"
+# /start handler
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "👋 *Salaam!* \nKu soo dhowow *ICT Forex Signals Bot* 📈\n\n"
+        "➤ Fadlan dooro qaybta aad xiiseyneyso:\n\n"
+        "🪙 *Crypto:* BTC, ETH, SOL, XRP\n"
+        "🥇 *Metals:* GOLD, SILVER\n"
+        "📊 *Forex:* EURUSD, GBPUSD, USDJPY, AUDUSD, USDCAD",
+        reply_markup=ReplyKeyboardMarkup(menu_buttons, resize_keyboard=True),
+        parse_mode='Markdown'
+    )
+
+# App main runner
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+
+    print("✅ MODULE 1 READY — /start diyaarsan yahay")
+    app.run_polling()
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+import re
+
+# TOKEN-ka botka (ku beddel kanaga)
+TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+
+# /sendsignal command
+async def sendsignal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        text = " ".join(context.args)
+
+        # Signal format: SYMBOL EN=1.0 TP=2.0 SL=0.5 TF=15min Exp=ICT explanation
+        pattern = r'(\w+)\s+EN=(\d+\.\d+)\s+TP=(\d+\.\d+)\s+SL=(\d+\.\d+)\s+TF=(\w+)\s+Exp=(.+)'
+        match = re.search(pattern, text)
+
+        if not match:
+            await update.message.reply_text(
+                "❌ *Format khaldan!*\nFadlan isticmaal sidaan:\n"
+                "`/sendsignal EURUSD EN=1.0845 TP=1.0880 SL=1.0825 TF=15min Exp=FVG + SMT`",
+                parse_mode='Markdown'
+            )
+            return
+
+        symbol, en, tp, sl, tf, explanation = match.groups()
+
+        signal_msg = f"""
+📈 *New ICT Signal - {symbol.upper()} ({tf})*
+
+*ENTRY:* {en}  
+*TP:* 🎯 {tp}  
+*SL:* 🔻 {sl}  
+
+📚 *Explanation:* {explanation}
+⏰ *Time:* Auto Detected (London/NYC Session)
+"""
+        await update.message.reply_text(signal_msg, parse_mode='Markdown')
+
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Error: {str(e)}")
+
+# App main runner
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("sendsignal", sendsignal))
+
+    print("✅ MODULE 2 READY — Signal-ka diyaarsan yahay: /sendsignal")
+    app.run_polling()
+from telegram import Update, Audio
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+
+# Token-kaaga Telegram bot
+TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+
+# File paths (MP3 sounds must exist in same folder)
+TP_SOUND = "tp_sound.mp3"
+SL_SOUND = "sl_sound.mp3"
+EN_SOUND = "entry_sound.mp3"
+
+# TP alert command
+async def tp(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("✅ *TP hit!* 💰", parse_mode='Markdown')
+    with open(TP_SOUND, 'rb') as audio:
+        await update.message.reply_audio(audio=audio)
+
+# SL alert command
+async def sl(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("❌ *SL hit!* 😢", parse_mode='Markdown')
+    with open(SL_SOUND, 'rb') as audio:
+        await update.message.reply_audio(audio=audio)
+
+# Entry alert command
+async def entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🟡 *Entry reached!*", parse_mode='Markdown')
+    with open(EN_SOUND, 'rb') as audio:
+        await update.message.reply_audio(audio=audio)
+
+# Run the bot
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("tp", tp))
+    app.add_handler(CommandHandler("sl", sl))
+    app.add_handler(CommandHandler("entry", entry))
+
+    print("✅ MODULE 3 READY — Voice alerts: /tp /sl /entry")
+    app.run_polling()
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+
+# Token kaaga Telegram
+TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+
+# PATH fileka image-ka (bedel magaca & location haddii loo baahdo)
+CHART_PATH = "chart_sample.jpg"  # chart_sample.jpg waa sawirka la dirayo
+
+# Command /sendchart
+async def sendchart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        with open(CHART_PATH, 'rb') as photo:
+            await update.message.reply_photo(photo=photo, caption="🖼️ *Chart-ka la xiriira signalka*", parse_mode='Markdown')
+    except FileNotFoundError:
+        await update.message.reply_text("❌ Chart image ma jiro. Fadlan geli file: `chart_sample.jpg`.")
+
+# Run bot
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("sendchart", sendchart))
+
+    print("✅ MODULE 4 READY — /sendchart image signal")
+    app.run_polling()
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+
+# Token-kaaga bot
+TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+
+# Balance & daily max drawdown
+BALANCE = 5000
+MAX_DRAWDOWN = 250
+
+# Formula: Lot Size = (Risk $ / SL in pips) / 10 for standard
+def calculate_lot(risk_percent, sl_pips):
+    risk_dollars = (risk_percent / 100) * BALANCE
+    lot_size = risk_dollars / (sl_pips * 10)  # assuming 1 lot = $10/pip
+    return round(lot_size, 2), risk_dollars
+
+# Command: /risk 1% 20pips
+async def risk(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        if len(context.args) != 2:
+            await update.message.reply_text("❌ Format: `/risk 1 20` → (1% risk, 20 pips SL)", parse_mode='Markdown')
+            return
+
+        risk_percent = float(context.args[0])
+        sl_pips = float(context.args[1])
+
+        lot, dollars = calculate_lot(risk_percent, sl_pips)
+
+        await update.message.reply_text(
+            f"📊 *Lot Size Calculation*\n\n"
+            f"- Risk: {risk_percent}% (${dollars:.2f})\n"
+            f"- Stop Loss: {sl_pips} pips\n"
+            f"- 🔢 Lot Size: *{lot}* lots\n"
+            f"- 💰 Account: ${BALANCE} | Max Daily Risk: ${MAX_DRAWDOWN}",
+            parse_mode='Markdown'
         )
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton("✅ Confirm", callback_data=f"CONFIRM:{s['pair']}:{s['dir']}:{lot_size}")]])
-        if chart:
-            await bot.send_photo(chat_id=CHAT_ID, photo=chart, caption=msg, reply_markup=markup, parse_mode="Markdown")
-        else:
-            await bot.send_message(chat_id=CHAT_ID, text=msg, reply_markup=markup, parse_mode="Markdown")
-        await send_voice(f"{s['pair']} {s['tf']} signal {s['dir']} now active.", context or app, CHAT_ID)
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Error: {str(e)}")
 
-# Flask Home
-@flask_app.route("/")
-async def home(): return "✅ Hussein7 Bot is Live!"
+# Run bot
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(TOKEN).build()
 
-# Webhook Receiver
-@flask_app.route("/telegram-webhook", methods=["POST"])
-async def telegram_webhook():
-    update = Update.de_json(request.get_json(force=True), app.bot)
-    await app.process_update(update)
-    return "OK"
+    app.add_handler(CommandHandler("risk", risk))
 
-# Command Handler
-async def signals_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await send_signals(context)
+    print("✅ MODULE 5 READY — Command: /risk 1 20")
+    app.run_polling()
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from fpdf import FPDF
+from datetime import datetime
+import os
 
-# Add Handler
-app.add_handler(CommandHandler("signals", signals_command))
+# Telegram Bot Token (bedelkan)
+TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
 
-# Init and Run
-async def initialize_bot():
-    await app.initialize()
-    await app.bot.set_webhook(url=f"{WEBHOOK_URL}/telegram-webhook")
+# Tijaabo fursado (mock data)
+trades = [
+    {"symbol": "EURUSD", "EN": "1.0845", "TP": "1.0880", "SL": "1.0825", "result": "WIN", "pnl": "+35 pips"},
+    {"symbol": "GOLD", "EN": "2310.0", "TP": "2330.0", "SL": "2290.0", "result": "LOSS", "pnl": "-20 pips"},
+    {"symbol": "BTC", "EN": "65000", "TP": "67000", "SL": "64000", "result": "WIN", "pnl": "+2000"}
+]
+
+# PDF sameynta
+def generate_pdf():
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+
+    pdf.cell(200, 10, txt="📊 Daily Trade Report", ln=True, align='C')
+    pdf.cell(200, 10, txt=f"Date: {datetime.now().strftime('%Y-%m-%d')}", ln=True, align='C')
+    pdf.ln(10)
+
+    for trade in trades:
+        pdf.cell(200, 10, txt=f"{trade['symbol']} | EN: {trade['EN']} | TP: {trade['TP']} | SL: {trade['SL']}", ln=True)
+        pdf.cell(200, 10, txt=f"Result: {trade['result']} | P&L: {trade['pnl']}", ln=True)
+        pdf.ln(5)
+
+    filepath = "daily_report.pdf"
+    pdf.output(filepath)
+    return filepath
+
+# /getreport command
+async def getreport(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    filepath = generate_pdf()
+    try:
+        with open(filepath, 'rb') as doc:
+            await update.message.reply_document(document=doc, filename=filepath, caption="📄 *Daily Trade Report*", parse_mode='Markdown')
+        os.remove(filepath)
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {e}")
+
+# Run bot
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("getreport", getreport))
+
+    print("✅ MODULE 6 READY — use /getreport to download PDF")
+    app.run_polling()
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+import csv
+import os
+from datetime import datetime
+
+# Token-kaaga Telegram bot
+TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+
+# Lacagaha la oggol yahay (11-ka aad codsatay)
+VALID_SYMBOLS = [
+    "BTC", "ETH", "SOL", "XRP",
+    "GOLD", "SILVER",
+    "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD"
+]
+
+CSV_FILE = "results.csv"
+
+# /result command: e.g. /result BTC WIN +2000
+async def result(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        if len(context.args) != 3:
+            await update.message.reply_text("❌ Format: `/result SYMBOL WIN|LOSS +PIPS`\nTusaale: `/result GOLD WIN +180`", parse_mode='Markdown')
+            return
+
+        symbol = context.args[0].upper()
+        outcome = context.args[1].upper()
+        pnl = context.args[2]
+
+        if symbol not in VALID_SYMBOLS:
+            await update.message.reply_text(f"❌ SYMBOL-ka lama aqoonsan: `{symbol}`\nKu isticmaal: {', '.join(VALID_SYMBOLS)}", parse_mode='Markdown')
+            return
+
+        if outcome not in ["WIN", "LOSS"]:
+            await update.message.reply_text("❌ Qeybta labaad waa in ay noqotaa WIN ama LOSS", parse_mode='Markdown')
+            return
+
+        date = datetime.now().strftime("%Y-%m-%d")
+        row = [date, symbol, outcome, pnl]
+
+        file_exists = os.path.isfile(CSV_FILE)
+        with open(CSV_FILE, mode='a', newline='') as file:
+            writer = csv.writer(file)
+            if not file_exists:
+                writer.writerow(["Date", "Symbol", "Result", "P&L"])
+            writer.writerow(row)
+
+        await update.message.reply_text(f"✅ Result saved: {symbol} → {outcome} {pnl}")
+
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Error: {e}")
+
+# Run bot
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("result", result))
+
+    print("✅ MODULE 7 READY — use /result SYMBOL WIN +PIPS")
+    app.run_polling()
+from flask import Flask, request
+from telegram import Bot
+import threading
+
+# Telegram bot token
+TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+CHAT_ID = "YOUR_CHAT_ID"  # Bedel chat id-ga (group ama user)
+
+bot = Bot(token=TOKEN)
+app = Flask(__name__)
+
+@app.route('/signal', methods=['POST'])
+def webhook_signal():
+    data = request.json
+    symbol = data.get("symbol", "Unknown")
+    en = data.get("EN", "N/A")
+    tp = data.get("TP", "N/A")
+    sl = data.get("SL", "N/A")
+    tf = data.get("TF", "15min")
+    explanation = data.get("Exp", "No explanation")
+
+    message = f"""
+📡 *New Signal via Webhook*
+
+*{symbol}* ({tf})
+
+▶️ EN: {en}  
+🎯 TP: {tp}  
+🛑 SL: {sl}
+
+📚 {explanation}
+"""
+    bot.send_message(chat_id=CHAT_ID, text=message, parse_mode='Markdown')
+    return {"status": "sent"}, 200
+
+def run_flask():
+    app.run(port=5000)
 
 if __name__ == "__main__":
-    import uvicorn
-    asyncio.run(initialize_bot())
-    uvicorn.run(asgi_app, host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
+    print("✅ MODULE 8 READY — Webhook server running on http://localhost:5000/signal")
+    threading.Thread(target=run_flask).start()
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+
+# Telegram bot token
+TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+
+# ✅ Liiska VIP ama Admin users (Telegram user ID)
+VIP_USERS = [123456789, 987654321]  # Ku beddel user ID-yada VIP
+
+# ➕ Add VIP-only command
+async def vip_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    if user_id not in VIP_USERS:
+        await update.message.reply_text("❌ Amarkan waxaa heli kara kaliya VIP / Admin.")
+        return
+
+    await update.message.reply_text("✅ Ku soo dhawoow VIP! Amar gaar ah ayaad gashay.")
+
+# ➕ Public command (cid kasta isticmaali karo)
+async def public_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("👋 Amarkan waxaa isticmaali kara cid kasta.")
+
+# Run bot
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("vip", vip_command))
+    app.add_handler(CommandHandler("start", public_command))
+
+    print("✅ MODULE 9 READY — Commands: /vip (restricted), /start (public)")
+    app.run_polling()
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from datetime import datetime
+
+# Token Telegram
+TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+
+# Static data (mock)
+def get_market_summary():
+    today = datetime.now().strftime("%Y-%m-%d %H:%M")
+    return f"""
+📊 *Daily Market Overview*  
+🕒 {today}
+
+🔸 *Crypto*
+- BTC: $64,300 ↑
+- ETH: $3,250 ↑
+- SOL: $145 ↑
+
+🔸 *Forex*
+- EURUSD: 1.0845 ↓
+- GBPUSD: 1.2750 →
+- USDJPY: 158.30 ↑
+
+🔸 *Stocks*
+- AAPL: $210.50 ↑
+- TSLA: $690.20 ↓
+- AMZN: $134.10 →
+
+📈 Xogtan waa guudmarka suuqa maanta.
+"""
+
+# /market command
+async def market(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    summary = get_market_summary()
+    await update.message.reply_text(summary, parse_mode='Markdown')
+
+# Run bot
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("market", market))
+
+    print("✅ MODULE 10 READY — Command: /market")
+    app.run_polling()
