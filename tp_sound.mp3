@@ -7,4 +7,4 @@ echo "ENTRY SOUND" > assets/entry_sound.mp3
 pip install -r requirements.txt
 python main.py
 
-
+tp_sound.mp3
